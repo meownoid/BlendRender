@@ -80,7 +80,7 @@ class RenderWorker:
         self._current_job_id: str | None = None
 
     async def start(self) -> None:
-        self._task = asyncio.create_task(self._loop(), name="blendqueue-render-worker")
+        self._task = asyncio.create_task(self._loop(), name="blendrender-render-worker")
         self._wake.set()
 
     async def stop(self) -> None:

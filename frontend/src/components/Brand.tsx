@@ -1,11 +1,10 @@
-import mark from '../assets/blendqueue-mark.png'
+import mark from '../assets/blendrender-mark.png'
 
 export function Brand() {
   return (
-    <div className="brand" aria-label="BlendQueue">
+    <div className="brand" aria-label="BlendRender">
       <img src={mark} alt="" className="brand__mark" />
-      <span>BlendQueue</span>
+      <span>BlendRender</span>
     </div>
   )
 }
-

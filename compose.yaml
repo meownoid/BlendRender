@@ -1,9 +1,9 @@
 services:
-  blendqueue:
+  blendrender:
     build:
       context: .
       platforms: [linux/amd64]
-    image: blendqueue:local
+    image: blendrender:local
     ports:
       - "8000:8000"
     environment:
@@ -11,4 +11,3 @@ services:
       COOKIE_SECURE: "false"
     gpus: all
     restart: unless-stopped
-

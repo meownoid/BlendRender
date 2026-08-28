@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-EVENT_PREFIX = "BLENDQUEUE_EVENT "
+EVENT_PREFIX = "BLENDRENDER_EVENT "
 SAMPLE_PATTERNS = (
     re.compile(r"Sample\s+(\d+)\s*/\s*(\d+)", re.IGNORECASE),
     re.compile(r"Rendering\s+(\d+)\s*/\s*(\d+)\s+samples", re.IGNORECASE),

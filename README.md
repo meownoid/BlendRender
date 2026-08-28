@@ -1,13 +1,13 @@
-# BlendQueue
+# BlendRender
 
-BlendQueue is a self-contained Blender render node for RunPod Pods. A single container serves the web interface and API, queues one Cycles render at a time, invokes Blender 5.2.1 LTS with OptiX, CUDA, or CPU, previews completed PNG frames, and provides individual or ZIP downloads. The frontend currently exposes only OptiX and CUDA; CPU is available through the API.
+BlendRender is a self-contained Blender render node for RunPod Pods. A single container serves the web interface and API, queues one Cycles render at a time, invokes Blender 5.2.1 LTS with OptiX, CUDA, or CPU, previews completed PNG frames, and provides individual or ZIP downloads. The frontend currently exposes only OptiX and CUDA; CPU is available through the API.
 
 ## RunPod deployment
 
 1. Build and push the `linux/amd64` image to a registry:
 
    ```bash
-   docker buildx build --platform linux/amd64 -t YOUR_REGISTRY/blendqueue:0.1.0 --push .
+   docker buildx build --platform linux/amd64 -t YOUR_REGISTRY/blendrender:0.1.0 --push .
    ```
 
 2. Create a **Pod** template in RunPod with:
@@ -30,7 +30,7 @@ Use an RTX-class NVIDIA GPU for OptiX. The UI disables render backends that Blen
 - The engine, selected backend, requested frames, output directory, and PNG format are overridden.
 - Samples, resolution width/height, and resolution percentage can optionally be overridden through the API. Omitted values preserve the active scene settings.
 - One job runs at a time. Completed frames survive cancel or an in-place application restart and are skipped on retry.
-- Files live under `/var/lib/blendqueue` only for the lifetime of the Pod filesystem.
+- Files live under `/var/lib/blendrender` only for the lifetime of the Pod filesystem.
 
 ## Local development
 
@@ -68,14 +68,14 @@ The Colima E2E test builds and runs a production-shaped `linux/amd64` image, upl
 just e2e-backend
 ```
 
-`BLENDQUEUE_E2E_ARCH` selects the Colima VM architecture and defaults to the host architecture. On Apple Silicon this means native `aarch64` Colima, a native host build of the portable frontend assets, and the production AMD64 Blender runtime running through Colima's binfmt support. `Dockerfile.e2e` mirrors the production runtime stages while consuming those prebuilt frontend assets, avoiding unstable execution of esbuild under QEMU:
+`BLENDRENDER_E2E_ARCH` selects the Colima VM architecture and defaults to the host architecture. On Apple Silicon this means native `aarch64` Colima, a native host build of the portable frontend assets, and the production AMD64 Blender runtime running through Colima's binfmt support. `Dockerfile.e2e` mirrors the production runtime stages while consuming those prebuilt frontend assets, avoiding unstable execution of esbuild under QEMU:
 
 ```bash
-BLENDQUEUE_E2E_ARCH=aarch64 just e2e-backend
-BLENDQUEUE_E2E_ARCH=x86_64 just e2e-backend
+BLENDRENDER_E2E_ARCH=aarch64 just e2e-backend
+BLENDRENDER_E2E_ARCH=x86_64 just e2e-backend
 ```
 
-Blender publishes 5.2.1 for Linux x64 only, so `BLENDQUEUE_E2E_PLATFORM` currently accepts only `linux/amd64`.
+Blender publishes 5.2.1 for Linux x64 only, so `BLENDRENDER_E2E_PLATFORM` currently accepts only `linux/amd64`.
 
 ## API
 

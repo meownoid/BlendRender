@@ -8,14 +8,14 @@ from collections import deque
 from fastapi import HTTPException, Request, Response, status
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
-COOKIE_NAME = "blendqueue_session"
+COOKIE_NAME = "blendrender_session"
 
 
 class SessionManager:
     def __init__(self, password: str, *, secure: bool, max_age: int):
-        secret = hashlib.sha256(f"blendqueue-session-v1:{password}".encode()).hexdigest()
+        secret = hashlib.sha256(f"blendrender-session-v1:{password}".encode()).hexdigest()
         self._password = password
-        self._serializer = URLSafeTimedSerializer(secret, salt="blendqueue-cookie-v1")
+        self._serializer = URLSafeTimedSerializer(secret, salt="blendrender-cookie-v1")
         self._secure = secure
         self._max_age = max_age
         self._failures: deque[float] = deque()

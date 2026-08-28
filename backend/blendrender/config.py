@@ -39,10 +39,10 @@ class Settings:
         )
         return cls(
             app_password=password,
-            data_root=Path(os.getenv("DATA_ROOT", "/var/lib/blendqueue")).resolve(),
+            data_root=Path(os.getenv("DATA_ROOT", "/var/lib/blendrender")).resolve(),
             blender_bin=Path(os.getenv("BLENDER_BIN", "/opt/blender/blender")),
             renderer_script=Path(
-                os.getenv("RENDERER_SCRIPT", str(project_root / "renderer/blendqueue_render.py"))
+                os.getenv("RENDERER_SCRIPT", str(project_root / "renderer/blendrender_render.py"))
             ).resolve(),
             frontend_dist=Path(
                 os.getenv("FRONTEND_DIST", str(project_root / "frontend/dist"))
@@ -56,7 +56,7 @@ class Settings:
 
     @property
     def database_path(self) -> Path:
-        return self.data_root / "blendqueue.sqlite3"
+        return self.data_root / "blendrender.sqlite3"
 
     @property
     def jobs_root(self) -> Path:

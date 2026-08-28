@@ -1,8 +1,8 @@
-from blendqueue.progress import overall_progress, parse_renderer_line
+from blendrender.progress import overall_progress, parse_renderer_line
 
 
 def test_parses_machine_event() -> None:
-    parsed = parse_renderer_line('BLENDQUEUE_EVENT {"type":"frame_started","frame":12}\n')
+    parsed = parse_renderer_line('BLENDRENDER_EVENT {"type":"frame_started","frame":12}\n')
     assert parsed.event == {"type": "frame_started", "frame": 12}
 
 

@@ -3,8 +3,8 @@ from __future__ import annotations
 import io
 import zipfile
 
-from blendqueue.main import create_app
-from blendqueue.worker import frame_filename, job_paths
+from blendrender.main import create_app
+from blendrender.worker import frame_filename, job_paths
 from fastapi.testclient import TestClient
 from PIL import Image
 

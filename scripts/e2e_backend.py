@@ -65,7 +65,7 @@ class Client:
 
 
 def multipart_job(blend_path: Path) -> tuple[bytes, str]:
-    boundary = f"blendqueue-e2e-{uuid.uuid4().hex}"
+    boundary = f"blendrender-e2e-{uuid.uuid4().hex}"
     parts: list[bytes] = []
 
     def field(name: str, value: str) -> None:
@@ -102,7 +102,7 @@ def multipart_job(blend_path: Path) -> tuple[bytes, str]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Exercise BlendQueue through its public API")
+    parser = argparse.ArgumentParser(description="Exercise BlendRender through its public API")
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--password", required=True)
     parser.add_argument("--blend", type=Path, required=True)
@@ -166,7 +166,7 @@ def main() -> None:
 
     client.request("DELETE", f"/api/jobs/{job_id}", expected=204)
     client.request("GET", f"/api/jobs/{job_id}", expected=404)
-    print("BlendQueue backend E2E passed", flush=True)
+    print("BlendRender backend E2E passed", flush=True)
 
 
 if __name__ == "__main__":

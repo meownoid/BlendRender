@@ -1,6 +1,6 @@
 import aiosqlite
-from blendqueue.db import SCHEMA, Database
-from blendqueue.models import Backend, JobStatus
+from blendrender.db import SCHEMA, Database
+from blendrender.models import Backend, JobStatus
 
 
 async def test_running_job_becomes_interrupted_after_restart(settings) -> None:

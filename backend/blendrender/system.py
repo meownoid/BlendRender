@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .models import Backend, GPUInfo, SystemInfo
 
-BACKEND_MARKER = "BLENDQUEUE_BACKENDS="
+BACKEND_MARKER = "BLENDRENDER_BACKENDS="
 
 
 async def _run_command(*args: str, timeout: float = 15) -> tuple[int, str]:

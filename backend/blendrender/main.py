@@ -72,7 +72,7 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
             await worker.stop()
 
     app = FastAPI(
-        title="BlendQueue",
+        title="BlendRender",
         version="0.1.0",
         docs_url=None,
         redoc_url=None,
@@ -346,7 +346,7 @@ async def _require_job(database: Database, job_id: str) -> Job:
 
 
 def _create_archive(settings: Settings, job: Job, frames: list[int]) -> Path:
-    handle, name = tempfile.mkstemp(prefix=f"blendqueue-{job.id}-", suffix=".zip")
+    handle, name = tempfile.mkstemp(prefix=f"blendrender-{job.id}-", suffix=".zip")
     os.close(handle)
     archive = Path(name)
     try:

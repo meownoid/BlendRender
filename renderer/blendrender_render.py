@@ -1,4 +1,4 @@
-"""Executed inside Blender to configure and render a BlendQueue job."""
+"""Executed inside Blender to configure and render a BlendRender job."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pathlib import Path
 
 import bpy
 
-PREFIX = "BLENDQUEUE_EVENT "
+PREFIX = "BLENDRENDER_EVENT "
 
 
 def emit(event_type: str, **payload: object) -> None:
@@ -20,7 +20,7 @@ def emit(event_type: str, **payload: object) -> None:
 
 def config_path() -> Path:
     if "--" not in sys.argv:
-        raise RuntimeError("Missing BlendQueue render configuration")
+        raise RuntimeError("Missing BlendRender render configuration")
     arguments = sys.argv[sys.argv.index("--") + 1 :]
     if len(arguments) != 1:
         raise RuntimeError("Expected exactly one render configuration path")

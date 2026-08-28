@@ -8,7 +8,7 @@ import pytest
 os.environ.setdefault("APP_PASSWORD", "test-password")
 os.environ.setdefault("COOKIE_SECURE", "false")
 
-from blendqueue.config import Settings  # noqa: E402
+from blendrender.config import Settings  # noqa: E402
 
 
 @pytest.fixture

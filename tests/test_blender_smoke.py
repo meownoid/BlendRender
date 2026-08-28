@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from blendqueue.worker import frame_filename
+from blendrender.worker import frame_filename
 from PIL import Image
 
 
@@ -77,7 +77,7 @@ bpy.ops.wm.save_as_mainfile(filepath=sys.argv[sys.argv.index("--") + 1])
         ),
         encoding="utf-8",
     )
-    renderer = Path(__file__).resolve().parents[1] / "renderer" / "blendqueue_render.py"
+    renderer = Path(__file__).resolve().parents[1] / "renderer" / "blendrender_render.py"
     completed = subprocess.run(
         [
             blender,
@@ -97,8 +97,8 @@ bpy.ops.wm.save_as_mainfile(filepath=sys.argv[sys.argv.index("--") + 1])
         timeout=120,
     )
 
-    assert 'BLENDQUEUE_EVENT {"type": "frame_started", "frame": 1}' in completed.stdout
-    assert 'BLENDQUEUE_EVENT {"type": "frame_completed", "frame": 1' in completed.stdout
+    assert 'BLENDRENDER_EVENT {"type": "frame_started", "frame": 1}' in completed.stdout
+    assert 'BLENDRENDER_EVENT {"type": "frame_completed", "frame": 1' in completed.stdout
     output = output_dir / frame_filename(1)
     with Image.open(output) as image:
         assert image.format == "PNG"

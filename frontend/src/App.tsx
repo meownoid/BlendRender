@@ -30,8 +30,7 @@ export default function App() {
     setAuthenticated(false)
   }
 
-  if (authenticated === null) return <div className="boot-screen"><span className="boot-screen__spinner" /><span>Opening BlendQueue</span></div>
+  if (authenticated === null) return <div className="boot-screen"><span className="boot-screen__spinner" /><span>Opening BlendRender</span></div>
   if (!authenticated) return <LoginPage onLogin={login} />
   return <Dashboard demo={demoMode} onLogout={logout} />
 }
-

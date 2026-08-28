@@ -1,4 +1,4 @@
-# BlendQueue design specification
+# BlendRender design specification
 
 The accepted dashboard and login concepts in this directory are the visual source of truth.
 
@@ -22,9 +22,8 @@ The accepted dashboard and login concepts in this directory are the visual sourc
 
 ## Allowed primary copy
 
-`BlendQueue`, `New render`, `Render jobs`, `All`, `Active`, `Completed`, `Rendered frames`,
+`BlendRender`, `New render`, `Render jobs`, `All`, `Active`, `Completed`, `Rendered frames`,
 `Download selected`, `Download all`, `Drop a packed .blend file`, `or choose a file`, `Mode`,
 `Still`, `Frame range`, `Start`, `End`, `Backend`, `OptiX`, `CUDA`, `Queue render`,
 `Open render node`, `Enter the access password configured for this pod.`, `Password`, `Continue`,
 and `Blender 5.2 LTS · GPU node`.
-
