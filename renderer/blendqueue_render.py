@@ -76,10 +76,18 @@ def run() -> None:
         suffix = "" if len(missing) <= 5 else f" and {len(missing) - 5} more"
         raise RuntimeError(f"Project contains missing unpacked assets: {sample}{suffix}")
 
-    test_only_cpu = backend == "CPU" and config.get("test_only_cpu") is True
-    devices = ["CPU smoke-test device"] if test_only_cpu else enable_backend(backend)
+    cpu_render = backend == "CPU"
+    devices = ["CPU"] if cpu_render else enable_backend(backend)
     scene.render.engine = "CYCLES"
-    scene.cycles.device = "CPU" if test_only_cpu else "GPU"
+    scene.cycles.device = "CPU" if cpu_render else "GPU"
+    if "samples" in config:
+        scene.cycles.samples = int(config["samples"])
+    if "resolution_x" in config:
+        scene.render.resolution_x = int(config["resolution_x"])
+    if "resolution_y" in config:
+        scene.render.resolution_y = int(config["resolution_y"])
+    if "resolution_percentage" in config:
+        scene.render.resolution_percentage = int(config["resolution_percentage"])
     scene.render.image_settings.file_format = "PNG"
     scene.render.use_file_extension = True
     emit("job_started", backend=backend, devices=devices, frame_count=len(frames))

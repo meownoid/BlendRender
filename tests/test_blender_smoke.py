@@ -70,7 +70,6 @@ bpy.ops.wm.save_as_mainfile(filepath=sys.argv[sys.argv.index("--") + 1])
         json.dumps(
             {
                 "backend": "CPU",
-                "test_only_cpu": True,
                 "frames": [1],
                 "output_dir": str(output_dir),
                 "diagnostic_report": str(report_path),

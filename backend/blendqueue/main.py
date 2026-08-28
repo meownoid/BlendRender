@@ -142,6 +142,10 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
         frame: Annotated[int | None, Form()] = None,
         start: Annotated[int | None, Form()] = None,
         end: Annotated[int | None, Form()] = None,
+        samples: Annotated[int | None, Form()] = None,
+        resolution_x: Annotated[int | None, Form()] = None,
+        resolution_y: Annotated[int | None, Form()] = None,
+        resolution_percentage: Annotated[int | None, Form()] = None,
         _: None = Depends(require_auth),
     ) -> Job:
         if backend not in probe.available_backends:
@@ -167,6 +171,22 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
             frame_start, frame_end = start, end
         if frame_end - frame_start + 1 > 100_000:
             raise HTTPException(status_code=422, detail="Frame range is too large")
+        if samples is not None and not 1 <= samples <= 1_000_000:
+            raise HTTPException(status_code=422, detail="Samples must be between 1 and 1000000")
+        if (resolution_x is None) != (resolution_y is None):
+            raise HTTPException(
+                status_code=422,
+                detail="Resolution width and height must be provided together",
+            )
+        if resolution_x is not None and not 4 <= resolution_x <= 65_536:
+            raise HTTPException(status_code=422, detail="Resolution width is out of range")
+        if resolution_y is not None and not 4 <= resolution_y <= 65_536:
+            raise HTTPException(status_code=422, detail="Resolution height is out of range")
+        if resolution_percentage is not None and not 1 <= resolution_percentage <= 100:
+            raise HTTPException(
+                status_code=422,
+                detail="Resolution percentage must be between 1 and 100",
+            )
 
         usage = shutil.disk_usage(resolved.data_root)
         if usage.free < 1024**3:
@@ -194,6 +214,10 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
                 frame_start=frame_start,
                 frame_end=frame_end,
                 backend=backend,
+                samples=samples,
+                resolution_x=resolution_x,
+                resolution_y=resolution_y,
+                resolution_percentage=resolution_percentage,
             )
         except Exception:
             shutil.rmtree(paths["root"], ignore_errors=True)

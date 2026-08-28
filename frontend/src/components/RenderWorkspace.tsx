@@ -50,7 +50,7 @@ export function RenderWorkspace({ job, demo, onCancel, onRetry, onDelete }: Rend
         <h1>{job.filename}</h1>
         <div className="job-meta">
           <span className={`job-meta__state job-meta__state--${job.status}`}><i />{statusLine(job)}</span><b />
-          <span><RefreshCw size={16} />{job.backend === 'OPTIX' ? 'OptiX' : 'CUDA'}</span><b />
+          {job.backend !== 'CPU' ? <><span><RefreshCw size={16} />{job.backend === 'OPTIX' ? 'OptiX' : 'CUDA'}</span><b /></> : null}
           <span>{formatDuration(job.elapsed_seconds)} elapsed</span><b />
           <span>{job.eta_seconds != null ? `${formatDuration(job.eta_seconds)} remaining` : 'Estimate pending'}</span>
         </div>

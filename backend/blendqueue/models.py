@@ -19,6 +19,7 @@ class JobStatus(StrEnum):
 class Backend(StrEnum):
     OPTIX = "OPTIX"
     CUDA = "CUDA"
+    CPU = "CPU"
 
 
 TERMINAL_STATUSES = {
@@ -43,6 +44,10 @@ class Job(BaseModel):
     frame_start: int
     frame_end: int
     backend: Backend
+    samples: int | None = None
+    resolution_x: int | None = None
+    resolution_y: int | None = None
+    resolution_percentage: int | None = None
     progress: float = Field(ge=0, le=100)
     current_frame: int | None = None
     completed_frames: list[int] = Field(default_factory=list)
@@ -85,4 +90,3 @@ class SystemInfo(BaseModel):
     available_backends: list[Backend]
     disk_free_bytes: int
     disk_total_bytes: int
-

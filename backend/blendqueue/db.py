@@ -18,6 +18,10 @@ CREATE TABLE IF NOT EXISTS jobs (
     frame_start INTEGER NOT NULL,
     frame_end INTEGER NOT NULL,
     backend TEXT NOT NULL,
+    samples INTEGER,
+    resolution_x INTEGER,
+    resolution_y INTEGER,
+    resolution_percentage INTEGER,
     progress REAL NOT NULL DEFAULT 0,
     current_frame INTEGER,
     completed_frames TEXT NOT NULL DEFAULT '[]',
@@ -42,6 +46,18 @@ class Database:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         async with aiosqlite.connect(self.path) as connection:
             await connection.executescript(SCHEMA)
+            columns = {
+                str(row[1])
+                for row in await (await connection.execute("PRAGMA table_info(jobs)")).fetchall()
+            }
+            for name in (
+                "samples",
+                "resolution_x",
+                "resolution_y",
+                "resolution_percentage",
+            ):
+                if name not in columns:
+                    await connection.execute(f"ALTER TABLE jobs ADD COLUMN {name} INTEGER")
             await connection.execute("PRAGMA journal_mode=WAL")
             await connection.execute("PRAGMA foreign_keys=ON")
             await connection.execute(
@@ -68,14 +84,19 @@ class Database:
         frame_start: int,
         frame_end: int,
         backend: Backend,
+        samples: int | None = None,
+        resolution_x: int | None = None,
+        resolution_y: int | None = None,
+        resolution_percentage: int | None = None,
     ) -> Job:
         created_at = utc_now()
         async with aiosqlite.connect(self.path) as connection:
             await connection.execute(
                 """
                 INSERT INTO jobs (
-                    id, filename, status, mode, frame_start, frame_end, backend, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    id, filename, status, mode, frame_start, frame_end, backend,
+                    samples, resolution_x, resolution_y, resolution_percentage, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     job_id,
@@ -85,6 +106,10 @@ class Database:
                     frame_start,
                     frame_end,
                     backend,
+                    samples,
+                    resolution_x,
+                    resolution_y,
+                    resolution_percentage,
                     created_at,
                 ),
             )

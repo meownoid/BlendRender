@@ -15,9 +15,12 @@ test:
     cd frontend && npm test
 
 check:
-    uv run ruff check backend tests renderer
+    uv run ruff check backend tests renderer scripts
     uv run mypy backend/blendqueue
     cd frontend && npm run lint && npm run build
 
 docker-build:
     docker buildx build --platform linux/amd64 --load -t blendqueue:local .
+
+e2e-backend:
+    ./scripts/e2e_backend_colima.sh

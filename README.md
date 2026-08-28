@@ -1,6 +1,6 @@
 # BlendQueue
 
-BlendQueue is a self-contained Blender GPU render node for RunPod Pods. A single container serves the web interface and API, queues one Cycles render at a time, invokes Blender 5.2.1 LTS with OptiX or CUDA, previews completed PNG frames, and provides individual or ZIP downloads.
+BlendQueue is a self-contained Blender render node for RunPod Pods. A single container serves the web interface and API, queues one Cycles render at a time, invokes Blender 5.2.1 LTS with OptiX, CUDA, or CPU, previews completed PNG frames, and provides individual or ZIP downloads. The frontend currently exposes only OptiX and CUDA; CPU is available through the API.
 
 ## RunPod deployment
 
@@ -27,7 +27,8 @@ Use an RTX-class NVIDIA GPU for OptiX. The UI disables render backends that Blen
 - Inputs must be one `.blend` file with external assets packed into it.
 - Embedded Python auto-execution is disabled.
 - The active scene and camera are used. Resolution, samples, denoising, compositor, and color management are preserved.
-- The engine, GPU backend, requested frames, output directory, and PNG format are overridden.
+- The engine, selected backend, requested frames, output directory, and PNG format are overridden.
+- Samples, resolution width/height, and resolution percentage can optionally be overridden through the API. Omitted values preserve the active scene settings.
 - One job runs at a time. Completed frames survive cancel or an in-place application restart and are skipped on retry.
 - Files live under `/var/lib/blendqueue` only for the lifetime of the Pod filesystem.
 
@@ -59,6 +60,23 @@ APP_PASSWORD='replace-me' docker compose up --build
 
 Apple Silicon can build the target image with Buildx and run the frontend/backend tests, but cannot validate NVIDIA passthrough. Final OptiX and CUDA smoke tests must run on a RunPod RTX Pod.
 
+## Container backend E2E on macOS
+
+The Colima E2E test builds and runs a production-shaped `linux/amd64` image, uploads the bundled real-world Blender fixture through the API, requests a one-sample 320×180 CPU frame at 5%, verifies PNG/WebP/ZIP downloads, and deletes the completed job:
+
+```bash
+just e2e-backend
+```
+
+`BLENDQUEUE_E2E_ARCH` selects the Colima VM architecture and defaults to the host architecture. On Apple Silicon this means native `aarch64` Colima, a native host build of the portable frontend assets, and the production AMD64 Blender runtime running through Colima's binfmt support. `Dockerfile.e2e` mirrors the production runtime stages while consuming those prebuilt frontend assets, avoiding unstable execution of esbuild under QEMU:
+
+```bash
+BLENDQUEUE_E2E_ARCH=aarch64 just e2e-backend
+BLENDQUEUE_E2E_ARCH=x86_64 just e2e-backend
+```
+
+Blender publishes 5.2.1 for Linux x64 only, so `BLENDQUEUE_E2E_PLATFORM` currently accepts only `linux/amd64`.
+
 ## API
 
 All `/api` routes except login/session require the signed session cookie.
@@ -69,5 +87,7 @@ All `/api` routes except login/session require the signed session cookie.
 - `POST /api/jobs/{id}/cancel`, `POST /api/jobs/{id}/retry`, `DELETE /api/jobs/{id}`
 - `GET /api/jobs/{id}/frames/{frame}` (`?preview=true` for WebP)
 - `POST /api/jobs/{id}/archive` with `{ "frames": [1, 2] }` or `{ "frames": null }`
+
+`POST /api/jobs` accepts `backend=OPTIX|CUDA|CPU` and optional `samples`, `resolution_x`, `resolution_y`, and `resolution_percentage` multipart fields. Resolution width and height must be supplied together.
 
 This project is intended for trusted operators. Disabling Blender auto-execution and constraining paths reduces risk, but a Blender process is not a strong hostile multi-tenant sandbox.

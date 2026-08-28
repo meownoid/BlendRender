@@ -128,11 +128,14 @@ class RenderWorker:
             for frame in range(job.frame_start, job.frame_end + 1)
             if frame not in set(completed)
         ]
-        config = {
+        config: dict[str, object] = {
             "backend": job.backend.value,
             "frames": remaining,
             "output_dir": str(paths["outputs"]),
         }
+        for field in ("samples", "resolution_x", "resolution_y", "resolution_percentage"):
+            if (value := getattr(job, field)) is not None:
+                config[field] = value
         paths["config"].write_text(json.dumps(config), encoding="utf-8")
         command = [
             str(self.settings.blender_bin),

@@ -29,10 +29,14 @@ def test_authentication_and_job_lifecycle(settings) -> None:
         assert client.post("/api/auth/login", json={"password": "wrong"}).status_code == 401
         login(client)
         response = create_job(client)
-        assert response.status_code == 201
+        assert response.status_code == 201, response.text
         job = response.json()
         assert job["status"] == "queued"
         assert job["frame_start"] == 1
+        assert job["samples"] is None
+        assert job["resolution_x"] is None
+        assert job["resolution_y"] is None
+        assert job["resolution_percentage"] is None
         canceled = client.post(f"/api/jobs/{job['id']}/cancel", json={})
         assert canceled.status_code == 200
         assert canceled.json()["status"] == "canceled"
@@ -64,6 +68,45 @@ def test_upload_validation(settings) -> None:
             data={"mode": "still", "backend": "CUDA", "frame": "4"},
         )
         assert response.status_code == 422
+
+
+def test_cpu_backend_and_optional_render_overrides(settings) -> None:
+    app = create_app(settings, start_worker=False)
+    with TestClient(app) as client:
+        login(client)
+        response = client.post(
+            "/api/jobs",
+            files={"file": ("scene.blend", b"BLENDER-v1-test-data")},
+            data={
+                "mode": "still",
+                "backend": "CPU",
+                "frame": "8",
+                "samples": "16",
+                "resolution_x": "640",
+                "resolution_y": "360",
+                "resolution_percentage": "50",
+            },
+        )
+        assert response.status_code == 201, response.text
+        job = response.json()
+        assert job["backend"] == "CPU"
+        assert job["samples"] == 16
+        assert job["resolution_x"] == 640
+        assert job["resolution_y"] == 360
+        assert job["resolution_percentage"] == 50
+
+        invalid_resolution = client.post(
+            "/api/jobs",
+            files={"file": ("scene.blend", b"BLENDER-v1-test-data")},
+            data={
+                "mode": "still",
+                "backend": "CPU",
+                "frame": "8",
+                "resolution_x": "640",
+            },
+        )
+        assert invalid_resolution.status_code == 422
+        assert "provided together" in invalid_resolution.json()["detail"]
 
 
 def test_frame_and_archive_download(settings) -> None:

@@ -23,5 +23,5 @@ def settings(tmp_path: Path) -> Settings:
         cookie_secure=False,
         session_ttl_seconds=3600,
         cancel_grace_seconds=0.1,
-        available_backends_override=("OPTIX", "CUDA"),
+        available_backends_override=("OPTIX", "CUDA", "CPU"),
     )

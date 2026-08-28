@@ -37,10 +37,12 @@ class SystemProbe:
             first_line = version_output.splitlines()[0]
             self.blender_version = first_line.removeprefix("Blender ").strip()
         if self.override:
-            self.available_backends = [Backend(item) for item in self.override]
+            self.available_backends = list(dict.fromkeys(Backend(item) for item in self.override))
             return
+        if self.blender_version is None:
+            return
+        self.available_backends = [Backend.CPU]
         if not await self.gpus():
-            self.available_backends = []
             return
         expression = (
             "import bpy; p=bpy.context.preferences.addons['cycles'].preferences; "
@@ -63,8 +65,8 @@ class SystemProbe:
                 (line for line in output.splitlines() if line.startswith(BACKEND_MARKER)), ""
             )
             names = marker_line.removeprefix(BACKEND_MARKER).split(",")
-            valid_names = {backend.value for backend in Backend}
-            self.available_backends = [Backend(name) for name in names if name in valid_names]
+            gpu_names = {Backend.OPTIX.value, Backend.CUDA.value}
+            self.available_backends.extend(Backend(name) for name in names if name in gpu_names)
 
     async def gpus(self) -> list[GPUInfo]:
         code, output = await _run_command(

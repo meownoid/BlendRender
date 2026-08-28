@@ -43,6 +43,10 @@ export const api = {
       body.append('start', String(form.start))
       body.append('end', String(form.end))
     }
+    if (form.samples != null) body.append('samples', String(form.samples))
+    if (form.resolution_x != null) body.append('resolution_x', String(form.resolution_x))
+    if (form.resolution_y != null) body.append('resolution_y', String(form.resolution_y))
+    if (form.resolution_percentage != null) body.append('resolution_percentage', String(form.resolution_percentage))
     return request<Job>('/api/jobs', { method: 'POST', body })
   },
   cancel: (id: string) => request<Job>(`/api/jobs/${id}/cancel`, { method: 'POST', body: '{}' }),
@@ -70,4 +74,3 @@ export const api = {
     URL.revokeObjectURL(url)
   },
 }
-

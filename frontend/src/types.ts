@@ -1,4 +1,5 @@
-export type Backend = 'OPTIX' | 'CUDA'
+export type Backend = 'OPTIX' | 'CUDA' | 'CPU'
+export type VisibleBackend = Exclude<Backend, 'CPU'>
 export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'canceled' | 'interrupted'
 
 export interface Job {
@@ -9,6 +10,10 @@ export interface Job {
   frame_start: number
   frame_end: number
   backend: Backend
+  samples: number | null
+  resolution_x: number | null
+  resolution_y: number | null
+  resolution_percentage: number | null
   progress: number
   current_frame: number | null
   completed_frames: number[]
@@ -43,6 +48,9 @@ export interface RenderForm {
   frame: number
   start: number
   end: number
-  backend: Backend
+  backend: VisibleBackend
+  samples?: number
+  resolution_x?: number
+  resolution_y?: number
+  resolution_percentage?: number
 }
-

@@ -35,7 +35,7 @@ class Settings:
         override = tuple(
             item.strip().upper()
             for item in os.getenv("AVAILABLE_BACKENDS", "").split(",")
-            if item.strip().upper() in {"OPTIX", "CUDA"}
+            if item.strip().upper() in {"OPTIX", "CUDA", "CPU"}
         )
         return cls(
             app_password=password,
@@ -61,4 +61,3 @@ class Settings:
     @property
     def jobs_root(self) -> Path:
         return self.data_root / "jobs"
-
