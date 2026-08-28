@@ -15,6 +15,8 @@ The accepted dashboard and login concepts in this directory are the visual sourc
 
 - Native comparison viewport: 1586 × 992.
 - Desktop: quiet 73 px header, 378 px job rail, fluid render workspace, 372 px new-render rail.
+- The header system control opens a shared 372 px system-stats rail with 15-minute CPU, GPU, host
+  memory, and GPU-VRAM plots; it replaces the new-render rail until the user switches back.
 - Below 1280 px the new-render rail becomes an overlay drawer.
 - Below 820 px the job rail becomes a horizontal selector and the frame rail scrolls horizontally.
 - The dashboard preview is always a real completed frame. The bundled demo render is gated to Vite development mode.
@@ -25,5 +27,6 @@ The accepted dashboard and login concepts in this directory are the visual sourc
 `BlendRender`, `New render`, `Render jobs`, `All`, `Active`, `Completed`, `Rendered frames`,
 `Download selected`, `Download all`, `Drop a packed .blend file`, `or choose a file`, `Mode`,
 `Still`, `Frame range`, `Start`, `End`, `Backend`, `OptiX`, `CUDA`, `Queue render`,
+`CPU`, `System stats`, `Last 15 minutes`, `GPU`, `MEM`, `VRAM`,
 `Open render node`, `Enter the access password configured for this pod.`, `Password`, `Continue`,
 and `Blender 5.2 LTS · GPU node`.

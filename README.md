@@ -4,8 +4,8 @@ BlendRender is a self-contained Blender render node for RunPod Pods. One contain
 React dashboard and FastAPI API, queues one Cycles render at a time, invokes Blender 5.2.1 with
 OptiX, CUDA, or CPU, creates WebP previews, and provides PNG or ZIP downloads.
 
-The dashboard exposes OptiX and CUDA. CPU rendering is available through the API and is used by
-the container end-to-end test.
+The dashboard exposes OptiX, CUDA, and CPU rendering. Its system control reports live CPU, GPU,
+host-memory, and GPU-VRAM telemetry; CPU is also used by the container end-to-end test.
 
 ## RunPod quick start
 
@@ -26,9 +26,9 @@ the container end-to-end test.
 
 3. Open `https://POD_ID-8000.proxy.runpod.net` and sign in with `APP_PASSWORD`.
 
-Use an RTX-class NVIDIA GPU for OptiX. The dashboard disables GPU backends that Blender cannot
-detect. `GET /healthz` checks the web process; `GET /readyz` succeeds once Blender and at least one
-render backend are available.
+Use an RTX-class NVIDIA GPU for OptiX. The dashboard disables backends that Blender cannot detect.
+`GET /healthz` checks the web process; `GET /readyz` succeeds once Blender and at least one render
+backend are available.
 
 See [Deployment and operations](docs/deployment.md) for configuration, storage, health checks,
 and platform constraints.

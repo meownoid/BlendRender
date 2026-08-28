@@ -13,7 +13,7 @@ render worker owns the queue.
 | Session handling | `backend/blendrender/auth.py` | Password verification, signed cookies, rate limiting, and cross-origin mutation checks |
 | SQLite store | `backend/blendrender/db.py` | Job state, queue ordering, progress, errors, and restart recovery |
 | Render worker | `backend/blendrender/worker.py` | Single-job scheduling, Blender process control, log parsing, preview generation, cancel, and retry |
-| System probe | `backend/blendrender/system.py` | Blender version, NVIDIA telemetry, render backend detection, disk usage, and readiness |
+| System probe | `backend/blendrender/system.py` | Blender version, host CPU/RAM and NVIDIA telemetry, render backend detection, disk usage, and readiness |
 | Blender-side runner | `renderer/blendrender_render.py` | Scene validation, Cycles/device configuration, frame rendering, and structured progress events |
 | Production image | `Dockerfile` | Frontend build, Python environment, pinned Blender runtime, non-root user, and process entrypoint |
 
@@ -31,7 +31,7 @@ render worker owns the queue.
 6. Each frame-completion event causes the PNG to be checked with Pillow. A maximum 720×480 WebP
    preview is generated for a valid output frame.
 7. The frontend polls jobs and system information every 1.5 seconds while work is active and every
-   8 seconds while idle.
+   8 seconds while idle, retaining a browser-local 15-minute system-metric history.
 
 ## Job lifecycle
 

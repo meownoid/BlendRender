@@ -5,6 +5,8 @@ import re
 import shutil
 from pathlib import Path
 
+import psutil
+
 from .models import Backend, GPUInfo, SystemInfo
 
 BACKEND_MARKER = "BLENDRENDER_BACKENDS="
@@ -32,6 +34,7 @@ class SystemProbe:
         self.available_backends: list[Backend] = []
 
     async def initialize(self) -> None:
+        psutil.cpu_percent(interval=None)
         version_code, version_output = await _run_command(str(self.blender_bin), "--version")
         if version_code == 0 and version_output:
             first_line = version_output.splitlines()[0]
@@ -98,10 +101,14 @@ class SystemProbe:
     async def info(self) -> SystemInfo:
         self.data_root.mkdir(parents=True, exist_ok=True)
         usage = shutil.disk_usage(self.data_root)
+        memory = psutil.virtual_memory()
         return SystemInfo(
             blender_version=self.blender_version,
             gpus=await self.gpus(),
             available_backends=self.available_backends,
+            cpu_utilization=psutil.cpu_percent(interval=None),
+            memory_used_bytes=memory.total - memory.available,
+            memory_total_bytes=memory.total,
             disk_free_bytes=usage.free,
             disk_total_bytes=usage.total,
         )

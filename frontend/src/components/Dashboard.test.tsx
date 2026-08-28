@@ -19,3 +19,14 @@ test('closes and reopens the new render panel', () => {
   fireEvent.click(screen.getByRole('button', { name: 'New render' }))
   expect(screen.getByRole('button', { name: 'Close new render panel' })).toBeVisible()
 })
+
+test('switches the shared rail to system stats and back to new render', () => {
+  render(<Dashboard demo onLogout={vi.fn()} />)
+  fireEvent.click(screen.getByRole('button', { name: /Open system stats/ }))
+  expect(screen.getByRole('heading', { name: 'System stats' })).toBeVisible()
+  expect(screen.getByRole('heading', { name: 'CPU' })).toBeVisible()
+  expect(screen.getByRole('heading', { name: 'VRAM' })).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Close new render panel' })).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'New render' }))
+  expect(screen.getByRole('button', { name: 'Close new render panel' })).toBeVisible()
+})

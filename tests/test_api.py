@@ -57,6 +57,17 @@ def test_cross_origin_mutation_is_rejected(settings) -> None:
         assert response.headers["x-frame-options"] == "DENY"
 
 
+def test_system_info_exposes_host_telemetry(settings) -> None:
+    app = create_app(settings, start_worker=False)
+    with TestClient(app) as client:
+        login(client)
+        response = client.get("/api/system")
+        assert response.status_code == 200
+        system = response.json()
+        assert 0 <= system["cpu_utilization"] <= 100
+        assert 0 <= system["memory_used_bytes"] <= system["memory_total_bytes"]
+
+
 def test_upload_validation(settings) -> None:
     app = create_app(settings, start_worker=False)
     with TestClient(app) as client:

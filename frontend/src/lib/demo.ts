@@ -1,4 +1,5 @@
 import demoRender from '../assets/demo-render.png'
+import type { ResourceSample } from './resourceHistory'
 import type { Job, SystemInfo } from '../types'
 
 const now = new Date().toISOString()
@@ -81,9 +82,31 @@ export const demoJobs: Job[] = [
 export const demoSystem: SystemInfo = {
   blender_version: '5.2.1',
   gpus: [{ name: 'RTX 4090', utilization: 78, memory_used_mb: 11842, memory_total_mb: 24564 }],
-  available_backends: ['OPTIX', 'CUDA'],
+  available_backends: ['OPTIX', 'CUDA', 'CPU'],
+  cpu_utilization: 34,
+  memory_used_bytes: 27 * 1024 ** 3,
+  memory_total_bytes: 64 * 1024 ** 3,
   disk_free_bytes: 68 * 1024 ** 3,
   disk_total_bytes: 100 * 1024 ** 3,
 }
+
+const demoNow = Date.now()
+
+export const demoResourceHistory: ResourceSample[] = Array.from({ length: 91 }, (_, index) => {
+  const phase = index / 7
+  const memoryUtilization = 42 + Math.sin(phase / 2) * 5
+  const vramUtilization = 48 + Math.cos(phase / 1.6) * 7
+  return {
+    capturedAt: demoNow - (90 - index) * 10_000,
+    cpuUtilization: 30 + Math.sin(phase) * 12,
+    gpuUtilization: 72 + Math.cos(phase * 1.3) * 11,
+    memoryUtilization,
+    vramUtilization,
+    memoryUsedBytes: memoryUtilization / 100 * demoSystem.memory_total_bytes,
+    memoryTotalBytes: demoSystem.memory_total_bytes,
+    vramUsedMb: vramUtilization / 100 * demoSystem.gpus[0].memory_total_mb,
+    vramTotalMb: demoSystem.gpus[0].memory_total_mb,
+  }
+})
 
 export const demoRenderUrl = demoRender

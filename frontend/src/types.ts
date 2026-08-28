@@ -1,5 +1,4 @@
 export type Backend = 'OPTIX' | 'CUDA' | 'CPU'
-export type VisibleBackend = Exclude<Backend, 'CPU'>
 export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'canceled' | 'interrupted'
 
 export interface Job {
@@ -38,6 +37,9 @@ export interface SystemInfo {
   blender_version: string | null
   gpus: GPUInfo[]
   available_backends: Backend[]
+  cpu_utilization: number
+  memory_used_bytes: number
+  memory_total_bytes: number
   disk_free_bytes: number
   disk_total_bytes: number
 }
@@ -48,7 +50,7 @@ export interface RenderForm {
   frame: number
   start: number
   end: number
-  backend: VisibleBackend
+  backend: Backend
   samples?: number
   resolution_x?: number
   resolution_y?: number

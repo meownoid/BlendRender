@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../lib/api'
-import { demoJobs, demoSystem } from '../lib/demo'
+import { demoJobs, demoResourceHistory, demoSystem } from '../lib/demo'
+import { appendResourceSample, type ResourceSample } from '../lib/resourceHistory'
 import type { Job, RenderForm, SystemInfo } from '../types'
 import { AppHeader } from './AppHeader'
 import { JobRail } from './JobRail'
 import { NewRenderPanel } from './NewRenderPanel'
 import { RenderWorkspace } from './RenderWorkspace'
+import { SystemPanel } from './SystemPanel'
 
 type Filter = 'all' | 'active' | 'completed'
+type SidePanel = 'new-render' | 'system' | null
 
 interface DashboardProps {
   demo: boolean
@@ -17,9 +20,10 @@ interface DashboardProps {
 export function Dashboard({ demo, onLogout }: DashboardProps) {
   const [jobs, setJobs] = useState<Job[]>(demo ? demoJobs : [])
   const [system, setSystem] = useState<SystemInfo | null>(demo ? demoSystem : null)
+  const [resourceHistory, setResourceHistory] = useState<ResourceSample[]>(demo ? demoResourceHistory : [])
   const [selectedId, setSelectedId] = useState<string | null>(demo ? demoJobs[0].id : null)
   const [filter, setFilter] = useState<Filter>('all')
-  const [panelOpen, setPanelOpen] = useState(true)
+  const [sidePanel, setSidePanel] = useState<SidePanel>('new-render')
   const [queueing, setQueueing] = useState(false)
   const [error, setError] = useState('')
 
@@ -29,6 +33,7 @@ export function Dashboard({ demo, onLogout }: DashboardProps) {
       const [nextJobs, nextSystem] = await Promise.all([api.jobs(), api.system()])
       setJobs(nextJobs)
       setSystem(nextSystem)
+      setResourceHistory((history) => appendResourceSample(history, nextSystem))
       setSelectedId((current) => current && nextJobs.some((job) => job.id === current) ? current : nextJobs[0]?.id ?? null)
       setError('')
     } catch (reason) {
@@ -56,6 +61,7 @@ export function Dashboard({ demo, onLogout }: DashboardProps) {
   }, [demo, hasActiveJobs, refresh])
 
   const selectedJob = jobs.find((job) => job.id === selectedId) ?? null
+  const latestSample = resourceHistory.length ? resourceHistory[resourceHistory.length - 1] : null
 
   async function createJob(form: RenderForm) {
     if (demo) return
@@ -82,13 +88,14 @@ export function Dashboard({ demo, onLogout }: DashboardProps) {
   }
 
   return (
-    <div className={`app-shell${panelOpen ? ' app-shell--panel-open' : ''}`}>
-      <AppHeader system={system} panelOpen={panelOpen} onOpenPanel={() => setPanelOpen(true)} onLogout={() => void onLogout()} />
+    <div className={`app-shell${sidePanel ? ' app-shell--panel-open' : ''}`}>
+      <AppHeader system={system} latestSample={latestSample} renderPanelOpen={sidePanel === 'new-render'} systemPanelOpen={sidePanel === 'system'} onOpenPanel={() => setSidePanel('new-render')} onOpenSystem={() => setSidePanel('system')} onLogout={() => void onLogout()} />
       {error ? <div className="global-error" role="alert">{error}</div> : null}
       <div className="app-body">
         <JobRail jobs={jobs} selectedId={selectedId} filter={filter} onFilter={setFilter} onSelect={setSelectedId} />
         <RenderWorkspace job={selectedJob} demo={demo} onCancel={(job) => applyJobAction(job, api.cancel)} onRetry={(job) => applyJobAction(job, api.retry)} onDelete={deleteJob} />
-        <NewRenderPanel open={panelOpen} system={system} busy={queueing} onClose={() => setPanelOpen(false)} onSubmit={createJob} />
+        <NewRenderPanel open={sidePanel === 'new-render'} system={system} busy={queueing} onClose={() => setSidePanel(null)} onSubmit={createJob} />
+        <SystemPanel open={sidePanel === 'system'} system={system} samples={resourceHistory} onClose={() => setSidePanel(null)} />
       </div>
     </div>
   )

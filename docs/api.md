@@ -46,10 +46,11 @@ Use a private cookie-jar location in shared environments and remove it after use
 | --- | --- | --- |
 | `GET /healthz` | No | `200` when the web process can answer requests |
 | `GET /readyz` | No | `200` when Blender and at least one render backend are available; otherwise `503` |
-| `GET /api/system` | Yes | Blender version, GPU telemetry, available backends, and data-disk capacity |
+| `GET /api/system` | Yes | Blender version, host CPU/RAM and GPU telemetry, available backends, and data-disk capacity |
 
-Readiness accepts CPU as a backend. GPU telemetry comes from `nvidia-smi`; backend availability is
-probed once at application startup.
+Readiness accepts CPU as a backend. The response includes `cpu_utilization` (0–100),
+`memory_used_bytes`, and `memory_total_bytes` for the node environment. GPU telemetry comes from
+`nvidia-smi`; backend availability is probed once at application startup.
 
 ## Create a job
 

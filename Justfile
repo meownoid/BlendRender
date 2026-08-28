@@ -5,7 +5,7 @@ install:
     cd frontend && npm ci
 
 dev-backend:
-    APP_PASSWORD=${APP_PASSWORD:-blendrender-dev} COOKIE_SECURE=false AVAILABLE_BACKENDS=OPTIX,CUDA DATA_ROOT=./data uv run uvicorn blendrender.main:app --reload --port 8000
+    APP_PASSWORD=${APP_PASSWORD:-blendrender-dev} COOKIE_SECURE=false AVAILABLE_BACKENDS=CPU DATA_ROOT=./data uv run uvicorn blendrender.main:app --reload --port 8000
 
 dev-frontend:
     cd frontend && npm run dev
