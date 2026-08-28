@@ -9,7 +9,12 @@ CPU, GPU, host-memory, and GPU-VRAM telemetry; CPU is also used by the container
 
 ## RunPod quick start
 
-1. Build and push the `linux/amd64` image:
+Pushes to `main` and version tags test the project, build a private `linux/amd64` image, and publish
+it to `ghcr.io/OWNER/REPOSITORY`; pull requests run the tests and checks without registry write
+access. The workflow also applies `latest` on `main`, commit-specific tags prefixed with `sha-`,
+and the Git tag for version-tag builds.
+
+1. Use an image published by the workflow, or build and push one manually:
 
    ```bash
    docker buildx build --platform linux/amd64 \
@@ -31,7 +36,7 @@ Use an RTX-class NVIDIA GPU for OptiX. The dashboard disables backends that Blen
 backend are available.
 
 See [Deployment and operations](docs/deployment.md) for configuration, storage, health checks,
-and platform constraints.
+private GHCR access, and platform constraints.
 
 ## Render contract
 

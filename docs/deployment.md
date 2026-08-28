@@ -16,6 +16,29 @@ docker buildx build --platform linux/amd64 \
 Blender 5.2.1 is published for Linux x64 in this build, so the production target is
 `linux/amd64` even when the build host is Apple Silicon.
 
+## GitHub Actions and GHCR
+
+The `Test and publish image` workflow runs the unit tests, static checks, and frontend production
+build for pull requests, pushes to `main`, and tags beginning with `v`. Pull requests receive only
+read access and stop after verification. For trusted pushes, a production container build then
+publishes after verification succeeds:
+
+- a push to `main` publishes `ghcr.io/OWNER/REPOSITORY:main`, `:latest`, and `:sha-COMMIT`;
+- a version tag publishes `ghcr.io/OWNER/REPOSITORY:TAG` and `:sha-COMMIT`.
+
+Repository and owner names are normalized to lowercase for GHCR. The workflow uses its scoped
+`GITHUB_TOKEN`, so no publishing secret is required. GitHub makes a newly published container
+package private by default and links it to the source repository; keep that visibility unchanged
+in the package settings. An existing public package cannot be made private by this workflow.
+
+Consumers must authenticate before pulling the private image. Use a GitHub token that can read the
+package, then pull the desired commit-specific version:
+
+```bash
+echo "$GHCR_TOKEN" | docker login ghcr.io --username YOUR_GITHUB_USERNAME --password-stdin
+docker pull ghcr.io/OWNER/REPOSITORY:sha-COMMIT
+```
+
 ## RunPod configuration
 
 Create a RunPod **Pod**, not a serverless endpoint, with:

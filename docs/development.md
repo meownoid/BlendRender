@@ -62,6 +62,10 @@ layout. UI changes should follow the [design specification](design/design-spec.m
 | `just docker-build` | Production `linux/amd64` image build loaded as `blendrender:local` |
 | `just e2e-backend` | Real Blender CPU render through the public API in a Colima container |
 
+GitHub Actions runs the equivalent test and check commands for pull requests and trusted pushes.
+Pushes to `main` and `v*` tags then build and publish to the repository's private GHCR package
+after verification succeeds.
+
 During iteration, narrower commands are useful:
 
 ```bash
