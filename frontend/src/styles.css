@@ -155,6 +155,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .segmented button.is-selected { color: var(--text); border-color: var(--accent); background: #201c18; }
 .segmented button:disabled { opacity: .35; cursor: not-allowed; }
 .range-fields { margin-top: 29px; display: grid; gap: 28px; }
+.field--single { margin-top: 29px; }
 .field { display: grid; gap: 11px; }
 .field input { width: 100%; height: 42px; padding: 0 13px; border: 1px solid var(--line); border-radius: 5px; color: var(--text); background: #15191e; font-size: 14px; }
 .render-panel__error { min-height: 48px; padding-top: 12px; color: #ff8179; font-size: 12px; }
