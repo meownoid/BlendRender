@@ -1,93 +1,105 @@
 # BlendRender
 
-BlendRender is a self-contained Blender render node for RunPod Pods. A single container serves the web interface and API, queues one Cycles render at a time, invokes Blender 5.2.1 LTS with OptiX, CUDA, or CPU, previews completed PNG frames, and provides individual or ZIP downloads. The frontend currently exposes only OptiX and CUDA; CPU is available through the API.
+BlendRender is a self-contained Blender render node for RunPod Pods. One container serves a
+React dashboard and FastAPI API, queues one Cycles render at a time, invokes Blender 5.2.1 with
+OptiX, CUDA, or CPU, creates WebP previews, and provides PNG or ZIP downloads.
 
-## RunPod deployment
+The dashboard exposes OptiX and CUDA. CPU rendering is available through the API and is used by
+the container end-to-end test.
 
-1. Build and push the `linux/amd64` image to a registry:
+## RunPod quick start
+
+1. Build and push the `linux/amd64` image:
 
    ```bash
-   docker buildx build --platform linux/amd64 -t YOUR_REGISTRY/blendrender:0.1.0 --push .
+   docker buildx build --platform linux/amd64 \
+     -t YOUR_REGISTRY/blendrender:0.1.0 --push .
    ```
 
-2. Create a **Pod** template in RunPod with:
+2. Create a RunPod **Pod** template with:
 
-   - Container image: the tag pushed above.
-   - HTTP port: `8000`.
-   - Container disk: at least 20 GB, increased for large projects or frame ranges.
-   - Environment variable `APP_PASSWORD`: a long random password.
-   - No volume mount. Job data is deliberately ephemeral and disappears when the Pod is reset.
+   - the image tag built above;
+   - HTTP port `8000`;
+   - at least 20 GB of container disk;
+   - `APP_PASSWORD` set to a long random password; and
+   - no volume mount if job data should remain ephemeral.
 
 3. Open `https://POD_ID-8000.proxy.runpod.net` and sign in with `APP_PASSWORD`.
 
-Use an RTX-class NVIDIA GPU for OptiX. The UI disables render backends that Blender cannot detect. `/healthz` reports process health; `/readyz` returns 200 only after Blender and at least one GPU backend are ready.
+Use an RTX-class NVIDIA GPU for OptiX. The dashboard disables GPU backends that Blender cannot
+detect. `GET /healthz` checks the web process; `GET /readyz` succeeds once Blender and at least one
+render backend are available.
 
-## Render behavior
+See [Deployment and operations](docs/deployment.md) for configuration, storage, health checks,
+and platform constraints.
 
-- Inputs must be one `.blend` file with external assets packed into it.
+## Render contract
+
+- Upload one `.blend` file with all external assets packed into it.
+- The active scene and camera are used.
+- Resolution, samples, denoising, compositor, and color management are preserved unless an API
+  render override is supplied.
+- The worker overrides the engine, selected compute backend, requested frames, output location,
+  and output format (PNG).
 - Embedded Python auto-execution is disabled.
-- The active scene and camera are used. Resolution, samples, denoising, compositor, and color management are preserved.
-- The engine, selected backend, requested frames, output directory, and PNG format are overridden.
-- Samples, resolution width/height, and resolution percentage can optionally be overridden through the API. Omitted values preserve the active scene settings.
-- One job runs at a time. Completed frames survive cancel or an in-place application restart and are skipped on retry.
-- Files live under `/var/lib/blendrender` only for the lifetime of the Pod filesystem.
+- A single worker renders one job at a time. Verified completed PNGs are skipped on retry.
+- Job data lives below `/var/lib/blendrender` and lasts only as long as that filesystem.
+
+Read [Security and rendering](docs/security-and-rendering.md) before exposing a node or accepting
+files from other people.
 
 ## Local development
 
-Requirements: Python 3.12+, `uv`, Node 24+, npm, and optionally Blender 5.2.1.
+Requirements: Python 3.12+, [`uv`](https://docs.astral.sh/uv/), Node.js 24+, and npm. Blender
+5.2.1 is optional for ordinary unit tests and required for a real render smoke test.
 
 ```bash
 cp .env.example .env
 just install
+```
+
+Run these in separate terminals:
+
+```bash
 just dev-backend
 just dev-frontend
 ```
 
-The Vite development server is at `http://localhost:5173`. Add `?demo=1` for the visual QA dataset without starting a GPU render. `COOKIE_SECURE=false` is intentionally used only for local HTTP development.
-
-Run all checks with:
+Open `http://localhost:5173`. Add `?demo=1` for the visual QA dataset without starting a render.
+Run the normal verification suite with:
 
 ```bash
 just test
 just check
 ```
 
-Local Docker GPU execution requires Linux, Docker Compose 2.30+, an NVIDIA driver, and NVIDIA Container Toolkit:
+Detailed setup, commands, and test boundaries are in
+[Development and testing](docs/development.md).
 
-```bash
-APP_PASSWORD='replace-me' docker compose up --build
-```
+## Documentation
 
-Apple Silicon can build the target image with Buildx and run the frontend/backend tests, but cannot validate NVIDIA passthrough. Final OptiX and CUDA smoke tests must run on a RunPod RTX Pod.
+- [Documentation index](docs/README.md)
+- [Architecture](docs/architecture.md) — components, data flow, persistence, and job lifecycle
+- [API](docs/api.md) — authentication, endpoints, request fields, and examples
+- [Development and testing](docs/development.md) — setup, workflows, test layers, and project map
+- [Deployment and operations](docs/deployment.md) — RunPod, Docker, configuration, and health
+- [Security and rendering](docs/security-and-rendering.md) — trust boundary and scene behavior
+- [Design specification](docs/design/design-spec.md) — accepted UI concepts and visual tokens
 
-## Container backend E2E on macOS
+Contributor and coding-agent guidance is in [AGENTS.md](AGENTS.md).
 
-The Colima E2E test builds and runs a production-shaped `linux/amd64` image, uploads the bundled real-world Blender fixture through the API, requests a one-sample 320×180 CPU frame at 5%, verifies PNG/WebP/ZIP downloads, and deletes the completed job:
+## API summary
 
-```bash
-just e2e-backend
-```
-
-`BLENDRENDER_E2E_ARCH` selects the Colima VM architecture and defaults to the host architecture. On Apple Silicon this means native `aarch64` Colima, a native host build of the portable frontend assets, and the production AMD64 Blender runtime running through Colima's binfmt support. `Dockerfile.e2e` mirrors the production runtime stages while consuming those prebuilt frontend assets, avoiding unstable execution of esbuild under QEMU:
-
-```bash
-BLENDRENDER_E2E_ARCH=aarch64 just e2e-backend
-BLENDRENDER_E2E_ARCH=x86_64 just e2e-backend
-```
-
-Blender publishes 5.2.1 for Linux x64 only, so `BLENDRENDER_E2E_PLATFORM` currently accepts only `linux/amd64`.
-
-## API
-
-All `/api` routes except login/session require the signed session cookie.
+All `/api` routes except the login, logout, and session-inspection routes require the signed session
+cookie.
 
 - `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/session`
 - `GET /api/system`
 - `POST /api/jobs`, `GET /api/jobs`, `GET /api/jobs/{id}`
 - `POST /api/jobs/{id}/cancel`, `POST /api/jobs/{id}/retry`, `DELETE /api/jobs/{id}`
 - `GET /api/jobs/{id}/frames/{frame}` (`?preview=true` for WebP)
-- `POST /api/jobs/{id}/archive` with `{ "frames": [1, 2] }` or `{ "frames": null }`
+- `POST /api/jobs/{id}/archive`
 
-`POST /api/jobs` accepts `backend=OPTIX|CUDA|CPU` and optional `samples`, `resolution_x`, `resolution_y`, and `resolution_percentage` multipart fields. Resolution width and height must be supplied together.
-
-This project is intended for trusted operators. Disabling Blender auto-execution and constraining paths reduces risk, but a Blender process is not a strong hostile multi-tenant sandbox.
+`POST /api/jobs` accepts `backend=OPTIX|CUDA|CPU` and optional `samples`, `resolution_x`,
+`resolution_y`, and `resolution_percentage` multipart fields. See the [API reference](docs/api.md)
+for validation rules and curl examples.
