@@ -1,0 +1,14 @@
+services:
+  blendqueue:
+    build:
+      context: .
+      platforms: [linux/amd64]
+    image: blendqueue:local
+    ports:
+      - "8000:8000"
+    environment:
+      APP_PASSWORD: ${APP_PASSWORD:?Set APP_PASSWORD in .env or the shell}
+      COOKIE_SECURE: "false"
+    gpus: all
+    restart: unless-stopped
+
