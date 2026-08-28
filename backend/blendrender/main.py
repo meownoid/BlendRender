@@ -28,8 +28,10 @@ from .models import (
     LoginRequest,
     SessionResponse,
     SystemInfo,
+    TelemetrySample,
 )
 from .system import SystemProbe
+from .telemetry import TelemetryCollector
 from .worker import (
     RenderWorker,
     completed_output_frames,
@@ -54,22 +56,26 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
         resolved.available_backends_override,
     )
     worker = RenderWorker(resolved, database)
+    telemetry = TelemetryCollector(database, probe)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         resolved.jobs_root.mkdir(parents=True, exist_ok=True)
         await database.initialize()
         await probe.initialize()
+        await telemetry.start()
         if start_worker:
             await worker.start()
         app.state.settings = resolved
         app.state.database = database
         app.state.sessions = sessions
         app.state.probe = probe
+        app.state.telemetry = telemetry
         app.state.worker = worker
         yield
         if start_worker:
             await worker.stop()
+        await telemetry.stop()
 
     app = FastAPI(
         title="BlendRender",
@@ -132,7 +138,11 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
 
     @app.get("/api/system", response_model=SystemInfo)
     async def system_info(_: None = Depends(require_auth)) -> SystemInfo:
-        return await probe.info()
+        return telemetry.latest or await probe.info()
+
+    @app.get("/api/system/telemetry", response_model=list[TelemetrySample])
+    async def system_telemetry(_: None = Depends(require_auth)) -> list[TelemetrySample]:
+        return await database.list_telemetry()
 
     @app.post("/api/jobs", response_model=Job, status_code=201)
     async def create_job(
@@ -225,6 +235,7 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
         finally:
             await file.close()
         worker.notify()
+        telemetry.notify()
         return job
 
     @app.get("/api/jobs", response_model=list[Job])
@@ -245,7 +256,9 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
                 status_code=409,
                 detail="Only queued or running jobs can be canceled",
             )
-        return await worker.cancel(job)
+        updated = await worker.cancel(job)
+        telemetry.notify()
+        return updated
 
     @app.post("/api/jobs/{job_id}/retry", response_model=Job)
     async def retry_job(job_id: str, _: None = Depends(require_auth)) -> Job:
@@ -259,6 +272,7 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
         frames = await asyncio.to_thread(completed_output_frames, resolved, job)
         updated = await database.requeue(job_id, frames)
         worker.notify()
+        telemetry.notify()
         return updated
 
     @app.delete("/api/jobs/{job_id}", status_code=204)

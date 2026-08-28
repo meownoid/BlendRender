@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../lib/api'
 import { demoJobs, demoResourceHistory, demoSystem } from '../lib/demo'
-import { appendResourceSample, type ResourceSample } from '../lib/resourceHistory'
+import { deserializeResourceHistory, type ResourceSample } from '../lib/resourceHistory'
 import type { Job, RenderForm, SystemInfo } from '../types'
 import { AppHeader } from './AppHeader'
 import { JobRail } from './JobRail'
@@ -30,10 +30,14 @@ export function Dashboard({ demo, onLogout }: DashboardProps) {
   const refresh = useCallback(async () => {
     if (demo) return
     try {
-      const [nextJobs, nextSystem] = await Promise.all([api.jobs(), api.system()])
+      const [nextJobs, nextSystem, nextTelemetry] = await Promise.all([
+        api.jobs(),
+        api.system(),
+        api.telemetry(),
+      ])
       setJobs(nextJobs)
       setSystem(nextSystem)
-      setResourceHistory((history) => appendResourceSample(history, nextSystem))
+      setResourceHistory(deserializeResourceHistory(nextTelemetry))
       setSelectedId((current) => current && nextJobs.some((job) => job.id === current) ? current : nextJobs[0]?.id ?? null)
       setError('')
     } catch (reason) {

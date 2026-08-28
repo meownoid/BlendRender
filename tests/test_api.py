@@ -68,6 +68,33 @@ def test_system_info_exposes_host_telemetry(settings) -> None:
         assert 0 <= system["memory_used_bytes"] <= system["memory_total_bytes"]
 
 
+def test_system_telemetry_is_authenticated_and_persisted(settings) -> None:
+    app = create_app(settings, start_worker=False)
+    with TestClient(app) as client:
+        assert client.get("/api/system/telemetry").status_code == 401
+        login(client)
+        response = client.get("/api/system/telemetry")
+        assert response.status_code == 200
+        samples = response.json()
+        assert len(samples) == 1
+        assert set(samples[0]) == {
+            "captured_at",
+            "cpu_utilization",
+            "gpu_utilization",
+            "memory_used_bytes",
+            "memory_total_bytes",
+            "vram_used_mb",
+            "vram_total_mb",
+        }
+        captured_at = samples[0]["captured_at"]
+
+    restarted = create_app(settings, start_worker=False)
+    with TestClient(restarted) as client:
+        login(client)
+        samples = client.get("/api/system/telemetry").json()
+        assert any(sample["captured_at"] == captured_at for sample in samples)
+
+
 def test_upload_validation(settings) -> None:
     app = create_app(settings, start_worker=False)
     with TestClient(app) as client:

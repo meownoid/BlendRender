@@ -44,6 +44,16 @@ export interface SystemInfo {
   disk_total_bytes: number
 }
 
+export interface TelemetrySample {
+  captured_at: string
+  cpu_utilization: number
+  gpu_utilization: number | null
+  memory_used_bytes: number
+  memory_total_bytes: number
+  vram_used_mb: number | null
+  vram_total_mb: number | null
+}
+
 export interface RenderForm {
   file: File
   mode: 'still' | 'range'

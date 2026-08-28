@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import aiosqlite
 
-from .models import Backend, Job, JobStatus, utc_now
+from .models import Backend, Job, JobStatus, TelemetrySample, utc_now
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS jobs (
@@ -35,7 +36,18 @@ CREATE TABLE IF NOT EXISTS jobs (
     cancel_requested INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS jobs_status_created_idx ON jobs(status, created_at);
+CREATE TABLE IF NOT EXISTS telemetry_samples (
+    captured_at TEXT PRIMARY KEY,
+    cpu_utilization REAL NOT NULL,
+    gpu_utilization REAL,
+    memory_used_bytes INTEGER NOT NULL,
+    memory_total_bytes INTEGER NOT NULL,
+    vram_used_mb INTEGER,
+    vram_total_mb INTEGER
+);
 """
+
+TELEMETRY_RETENTION = timedelta(minutes=15)
 
 
 class Database:
@@ -138,6 +150,55 @@ class Database:
             cursor = await connection.execute(query, params)
             rows = await cursor.fetchall()
         return [self._to_job(row) for row in rows]
+
+    async def has_active_jobs(self) -> bool:
+        async with aiosqlite.connect(self.path) as connection:
+            cursor = await connection.execute(
+                "SELECT EXISTS(SELECT 1 FROM jobs WHERE status IN (?, ?))",
+                (JobStatus.QUEUED, JobStatus.RUNNING),
+            )
+            row = await cursor.fetchone()
+        if row is None:  # pragma: no cover - SELECT EXISTS always returns one row
+            return False
+        return bool(row[0])
+
+    async def record_telemetry(self, sample: TelemetrySample) -> None:
+        captured_at = datetime.fromisoformat(sample.captured_at).astimezone(UTC)
+        cutoff = (captured_at - TELEMETRY_RETENTION).isoformat()
+        async with aiosqlite.connect(self.path) as connection:
+            await connection.execute(
+                """
+                INSERT INTO telemetry_samples (
+                    captured_at, cpu_utilization, gpu_utilization, memory_used_bytes,
+                    memory_total_bytes, vram_used_mb, vram_total_mb
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    sample.captured_at,
+                    sample.cpu_utilization,
+                    sample.gpu_utilization,
+                    sample.memory_used_bytes,
+                    sample.memory_total_bytes,
+                    sample.vram_used_mb,
+                    sample.vram_total_mb,
+                ),
+            )
+            await connection.execute(
+                "DELETE FROM telemetry_samples WHERE captured_at < ?",
+                (cutoff,),
+            )
+            await connection.commit()
+
+    async def list_telemetry(self) -> list[TelemetrySample]:
+        cutoff = (datetime.now(UTC) - TELEMETRY_RETENTION).isoformat()
+        async with aiosqlite.connect(self.path) as connection:
+            connection.row_factory = aiosqlite.Row
+            cursor = await connection.execute(
+                "SELECT * FROM telemetry_samples WHERE captured_at >= ? ORDER BY captured_at ASC",
+                (cutoff,),
+            )
+            rows = await cursor.fetchall()
+        return [TelemetrySample.model_validate(dict(row)) for row in rows]
 
     async def next_queued_job(self) -> Job | None:
         async with aiosqlite.connect(self.path) as connection:

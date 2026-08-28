@@ -64,8 +64,10 @@ Deleting a terminal job through the dashboard or API is the supported way to rec
 
 - `GET /healthz` reports process liveness and is the image `HEALTHCHECK` target.
 - `GET /readyz` reports readiness after startup probing finds Blender and at least one backend.
-- `GET /api/system` reports the Blender version, host CPU/RAM, NVIDIA utilization/VRAM, available
-  backends, and disk capacity; it requires authentication.
+- `GET /api/system` reports the latest server-collected Blender version, host CPU/RAM, NVIDIA
+  utilization/VRAM, available backends, and disk capacity; it requires authentication.
+- `GET /api/system/telemetry` returns the SQLite-backed 15-minute telemetry history. Collection
+  runs every 5 seconds while jobs are queued or running and every 10 seconds otherwise.
 - Per-job `render.log` contains full Blender output. The API job object contains only the last
   12,000 characters as `log_tail`.
 

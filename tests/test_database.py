@@ -1,6 +1,8 @@
+from datetime import UTC, datetime, timedelta
+
 import aiosqlite
-from blendrender.db import SCHEMA, Database
-from blendrender.models import Backend, JobStatus
+from blendrender.db import SCHEMA, TELEMETRY_RETENTION, Database
+from blendrender.models import Backend, JobStatus, TelemetrySample
 
 
 async def test_running_job_becomes_interrupted_after_restart(settings) -> None:
@@ -72,3 +74,61 @@ async def test_existing_database_adds_optional_render_override_columns(settings)
         "resolution_y",
         "resolution_percentage",
     }.issubset(columns)
+
+
+async def test_telemetry_is_persisted_in_order_and_pruned(settings) -> None:
+    database = Database(settings.database_path)
+    await database.initialize()
+    now = datetime.now(UTC)
+    old = TelemetrySample(
+        captured_at=(now - TELEMETRY_RETENTION - timedelta(seconds=1)).isoformat(),
+        cpu_utilization=10,
+        gpu_utilization=None,
+        memory_used_bytes=1,
+        memory_total_bytes=2,
+        vram_used_mb=None,
+        vram_total_mb=None,
+    )
+    first = TelemetrySample(
+        captured_at=(now - timedelta(seconds=2)).isoformat(),
+        cpu_utilization=20,
+        gpu_utilization=30,
+        memory_used_bytes=2,
+        memory_total_bytes=4,
+        vram_used_mb=3,
+        vram_total_mb=6,
+    )
+    latest = first.model_copy(update={"captured_at": now.isoformat(), "cpu_utilization": 40})
+
+    await database.record_telemetry(old)
+    await database.record_telemetry(first)
+    await database.record_telemetry(latest)
+
+    restarted = Database(settings.database_path)
+    await restarted.initialize()
+    samples = await restarted.list_telemetry()
+
+    assert [sample.captured_at for sample in samples] == [first.captured_at, latest.captured_at]
+    assert [sample.cpu_utilization for sample in samples] == [20, 40]
+
+
+async def test_has_active_jobs_includes_queued_and_running_jobs(settings) -> None:
+    database = Database(settings.database_path)
+    await database.initialize()
+    assert not await database.has_active_jobs()
+
+    job = await database.create_job(
+        job_id="00000000-0000-4000-8000-000000000010",
+        filename="scene.blend",
+        mode="still",
+        frame_start=1,
+        frame_end=1,
+        backend=Backend.CPU,
+    )
+    assert await database.has_active_jobs()
+
+    await database.update(job.id, status=JobStatus.RUNNING)
+    assert await database.has_active_jobs()
+
+    await database.update(job.id, status=JobStatus.COMPLETED)
+    assert not await database.has_active_jobs()

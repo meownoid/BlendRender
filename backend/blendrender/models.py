@@ -93,3 +93,13 @@ class SystemInfo(BaseModel):
     memory_total_bytes: int = Field(gt=0)
     disk_free_bytes: int
     disk_total_bytes: int
+
+
+class TelemetrySample(BaseModel):
+    captured_at: str
+    cpu_utilization: float = Field(ge=0, le=100)
+    gpu_utilization: float | None = Field(default=None, ge=0, le=100)
+    memory_used_bytes: int = Field(ge=0)
+    memory_total_bytes: int = Field(gt=0)
+    vram_used_mb: int | None = Field(default=None, ge=0)
+    vram_total_mb: int | None = Field(default=None, ge=0)

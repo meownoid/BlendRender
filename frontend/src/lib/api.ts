@@ -1,4 +1,4 @@
-import type { Job, JobStatus, RenderForm, SystemInfo } from '../types'
+import type { Job, JobStatus, RenderForm, SystemInfo, TelemetrySample } from '../types'
 
 export class ApiError extends Error {
   constructor(
@@ -32,6 +32,7 @@ export const api = {
     }),
   logout: () => request('/api/auth/logout', { method: 'POST', body: '{}' }),
   system: () => request<SystemInfo>('/api/system'),
+  telemetry: () => request<TelemetrySample[]>('/api/system/telemetry'),
   jobs: (status?: JobStatus) => request<Job[]>(`/api/jobs${status ? `?status=${status}` : ''}`),
   createJob: (form: RenderForm) => {
     const body = new FormData()

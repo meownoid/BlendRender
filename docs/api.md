@@ -46,11 +46,18 @@ Use a private cookie-jar location in shared environments and remove it after use
 | --- | --- | --- |
 | `GET /healthz` | No | `200` when the web process can answer requests |
 | `GET /readyz` | No | `200` when Blender and at least one render backend are available; otherwise `503` |
-| `GET /api/system` | Yes | Blender version, host CPU/RAM and GPU telemetry, available backends, and data-disk capacity |
+| `GET /api/system` | Yes | Latest server-collected Blender version, host CPU/RAM and GPU telemetry, available backends, and data-disk capacity |
+| `GET /api/system/telemetry` | Yes | Chronological server-persisted CPU, GPU, host-memory, and VRAM samples from the last 15 minutes |
 
 Readiness accepts CPU as a backend. The response includes `cpu_utilization` (0–100),
 `memory_used_bytes`, and `memory_total_bytes` for the node environment. GPU telemetry comes from
 `nvidia-smi`; backend availability is probed once at application startup.
+
+The server collects telemetry every 5 seconds while work is queued or running and every 10 seconds
+while idle. `GET /api/system/telemetry` returns samples with `captured_at`, `cpu_utilization`,
+nullable `gpu_utilization`, `memory_used_bytes`, `memory_total_bytes`, nullable `vram_used_mb`, and
+nullable `vram_total_mb`. The rolling 15-minute history is stored in SQLite and survives browser
+refreshes and application restarts.
 
 ## Create a job
 

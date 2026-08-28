@@ -1,4 +1,4 @@
-import type { SystemInfo } from '../types'
+import type { TelemetrySample } from '../types'
 
 export const RESOURCE_HISTORY_MS = 15 * 60 * 1000
 
@@ -19,37 +19,22 @@ function percentage(used: number, total: number): number | null {
   return Math.max(0, Math.min(100, used / total * 100))
 }
 
-export function sampleResources(system: SystemInfo, capturedAt = Date.now()): ResourceSample {
-  const gpuUtilization = system.gpus.length
-    ? Math.max(...system.gpus.map((gpu) => gpu.utilization))
-    : null
-  const vramUsedMb = system.gpus.length
-    ? system.gpus.reduce((total, gpu) => total + gpu.memory_used_mb, 0)
-    : null
-  const vramTotalMb = system.gpus.length
-    ? system.gpus.reduce((total, gpu) => total + gpu.memory_total_mb, 0)
-    : null
-
+function sampleResources(sample: TelemetrySample): ResourceSample {
   return {
-    capturedAt,
-    cpuUtilization: system.cpu_utilization,
-    gpuUtilization,
-    memoryUtilization: percentage(system.memory_used_bytes, system.memory_total_bytes) ?? 0,
-    vramUtilization: vramUsedMb != null && vramTotalMb != null
-      ? percentage(vramUsedMb, vramTotalMb)
+    capturedAt: Date.parse(sample.captured_at),
+    cpuUtilization: sample.cpu_utilization,
+    gpuUtilization: sample.gpu_utilization,
+    memoryUtilization: percentage(sample.memory_used_bytes, sample.memory_total_bytes) ?? 0,
+    vramUtilization: sample.vram_used_mb != null && sample.vram_total_mb != null
+      ? percentage(sample.vram_used_mb, sample.vram_total_mb)
       : null,
-    memoryUsedBytes: system.memory_used_bytes,
-    memoryTotalBytes: system.memory_total_bytes,
-    vramUsedMb,
-    vramTotalMb,
+    memoryUsedBytes: sample.memory_used_bytes,
+    memoryTotalBytes: sample.memory_total_bytes,
+    vramUsedMb: sample.vram_used_mb,
+    vramTotalMb: sample.vram_total_mb,
   }
 }
 
-export function appendResourceSample(
-  history: ResourceSample[],
-  system: SystemInfo,
-  capturedAt = Date.now(),
-): ResourceSample[] {
-  const cutoff = capturedAt - RESOURCE_HISTORY_MS
-  return [...history, sampleResources(system, capturedAt)].filter((sample) => sample.capturedAt >= cutoff)
+export function deserializeResourceHistory(samples: TelemetrySample[]): ResourceSample[] {
+  return samples.map(sampleResources)
 }

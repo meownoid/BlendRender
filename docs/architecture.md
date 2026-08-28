@@ -11,9 +11,10 @@ render worker owns the queue.
 | React frontend | `frontend/src/` | Authentication screen, node status, job creation, polling, previews, and downloads |
 | FastAPI application | `backend/blendrender/main.py` | HTTP routes, validation, security headers, upload/download handling, and static frontend serving |
 | Session handling | `backend/blendrender/auth.py` | Password verification, signed cookies, rate limiting, and cross-origin mutation checks |
-| SQLite store | `backend/blendrender/db.py` | Job state, queue ordering, progress, errors, and restart recovery |
+| SQLite store | `backend/blendrender/db.py` | Job state, queue ordering, progress, errors, restart recovery, and telemetry history |
 | Render worker | `backend/blendrender/worker.py` | Single-job scheduling, Blender process control, log parsing, preview generation, cancel, and retry |
 | System probe | `backend/blendrender/system.py` | Blender version, host CPU/RAM and NVIDIA telemetry, render backend detection, disk usage, and readiness |
+| Telemetry collector | `backend/blendrender/telemetry.py` | Server-owned CPU, GPU, memory, and VRAM sampling with rolling SQLite retention |
 | Blender-side runner | `renderer/blendrender_render.py` | Scene validation, Cycles/device configuration, frame rendering, and structured progress events |
 | Production image | `Dockerfile` | Frontend build, Python environment, pinned Blender runtime, non-root user, and process entrypoint |
 
@@ -30,8 +31,10 @@ render worker owns the queue.
    stores progress and a bounded log tail, and appends the complete output to `render.log`.
 6. Each frame-completion event causes the PNG to be checked with Pillow. A maximum 720×480 WebP
    preview is generated for a valid output frame.
-7. The frontend polls jobs and system information every 1.5 seconds while work is active and every
-   8 seconds while idle, retaining a browser-local 15-minute system-metric history.
+7. The telemetry collector samples the node every 5 seconds while jobs are queued or running and
+   every 10 seconds otherwise, retaining the latest 15 minutes in SQLite. The frontend polls jobs,
+   system information, and that server-owned history every 1.5 seconds while work is active and
+   every 8 seconds while idle.
 
 ## Job lifecycle
 
@@ -66,7 +69,8 @@ The default data root is `/var/lib/blendrender`:
 ```
 
 SQLite uses WAL mode. During application startup, database rows left in `running` are marked
-`interrupted`. Files remain available, allowing a later retry to reuse valid frames.
+`interrupted`. The database also retains the most recent 15 minutes of node telemetry. Files remain
+available, allowing a later retry to reuse valid frames.
 
 The RunPod setup deliberately does not require a persistent volume. Mount or preserve `DATA_ROOT`
 only if job history and rendered files must survive replacement of the Pod filesystem.
