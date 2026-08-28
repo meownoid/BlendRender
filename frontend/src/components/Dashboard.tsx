@@ -83,7 +83,7 @@ export function Dashboard({ demo, onLogout }: DashboardProps) {
 
   return (
     <div className={`app-shell${panelOpen ? ' app-shell--panel-open' : ''}`}>
-      <AppHeader system={system} panelOpen={panelOpen} onTogglePanel={() => setPanelOpen((value) => !value)} onLogout={() => void onLogout()} />
+      <AppHeader system={system} panelOpen={panelOpen} onOpenPanel={() => setPanelOpen(true)} onLogout={() => void onLogout()} />
       {error ? <div className="global-error" role="alert">{error}</div> : null}
       <div className="app-body">
         <JobRail jobs={jobs} selectedId={selectedId} filter={filter} onFilter={setFilter} onSelect={setSelectedId} />

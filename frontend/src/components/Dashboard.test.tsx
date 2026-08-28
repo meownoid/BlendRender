@@ -11,3 +11,11 @@ test('renders the approved demo workflow and filters jobs', () => {
   expect(screen.getByText('hero_still.blend')).toBeVisible()
   expect(screen.queryByText('product_turntable.blend')).not.toBeInTheDocument()
 })
+
+test('closes and reopens the new render panel', () => {
+  render(<Dashboard demo onLogout={vi.fn()} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Close new render panel' }))
+  expect(screen.queryByRole('button', { name: 'Close new render panel' })).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'New render' }))
+  expect(screen.getByRole('button', { name: 'Close new render panel' })).toBeVisible()
+})

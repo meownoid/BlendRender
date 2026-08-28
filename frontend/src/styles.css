@@ -75,6 +75,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .app-header__logout { display: none; }
 .global-error { position: fixed; top: 83px; left: 50%; z-index: 20; transform: translateX(-50%); padding: 10px 16px; border: 1px solid #7b3634; border-radius: 6px; background: #311b1b; color: #ffaaa5; font-size: 13px; }
 .app-body { height: calc(100vh - 73px); display: grid; grid-template-columns: 378px minmax(560px, 1fr) 372px; }
+.app-shell:not(.app-shell--panel-open) .app-body { grid-template-columns: 378px minmax(560px, 1fr); }
+.app-shell:not(.app-shell--panel-open) .render-panel { display: none; }
 
 .job-rail { padding: 23px 19px 19px; border-right: 1px solid var(--line); overflow: hidden; }
 .job-rail h2, .render-panel h2 { margin: 0; font-size: 18px; letter-spacing: -.02em; font-weight: 580; }
@@ -95,10 +97,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .status-text--queued { color: var(--blue); }
 .status-text--completed { color: var(--green); }
 .status-text--failed, .status-text--interrupted, .status-text--canceled { color: #ff766f; }
-.job-list__empty { padding: 30px 20px; color: var(--muted); text-align: center; font-size: 13px; }
+.job-list__empty { height: 100%; margin: 0; padding: 20px; display: grid; place-items: center; color: var(--muted); text-align: center; font-size: 13px; }
 
 .workspace { min-width: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) 254px; overflow: hidden; }
-.workspace--empty { place-content: center; text-align: center; color: var(--muted); }
+.workspace--empty { grid-template-rows: minmax(0, 1fr); place-items: center; text-align: center; color: var(--muted); }
 .workspace--empty h1 { color: var(--text); }
 .job-heading { padding: 24px 28px 19px; }
 .job-heading h1 { margin: 0 0 14px; font-size: 20px; font-weight: 620; letter-spacing: -.02em; }
@@ -154,6 +156,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 
 @media (max-width: 1280px) {
   .app-body { grid-template-columns: 310px minmax(520px, 1fr); }
+  .app-shell:not(.app-shell--panel-open) .app-body { grid-template-columns: 310px minmax(520px, 1fr); }
+  .app-shell:not(.app-shell--panel-open) .render-panel { display: block; visibility: hidden; }
   .render-panel { position: fixed; z-index: 15; top: 73px; right: 0; bottom: 0; width: 372px; transform: translateX(100%); transition: transform .22s ease; box-shadow: -20px 0 40px rgba(0,0,0,.35); }
   .render-panel.is-open { transform: translateX(0); }
   .frame-tile { height: 132px; }
@@ -166,7 +170,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   .app-header { position: sticky; top: 0; z-index: 20; height: 66px; padding: 0 14px; }
   .brand { font-size: 20px; }
   .brand__mark { width: 43px; height: 43px; }
-  .gpu-meter, .app-header__actions > .icon-button:first-of-type { display: none; }
+  .gpu-meter { display: none; }
   .app-header__actions { gap: 8px; }
   .app-header__actions > .button { padding: 0 11px; font-size: 12px; }
   .app-header__logout { display: grid; }
@@ -177,6 +181,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   .job-list { height: auto; display: flex; overflow-x: auto; border: 0; gap: 10px; }
   .job-row { min-width: 260px; min-height: 84px; border: 1px solid var(--line); border-radius: 7px; }
   .workspace { display: block; }
+  .workspace--empty { min-height: 50vh; display: grid; }
   .job-heading { padding: 21px 16px 15px; }
   .job-meta { flex-wrap: wrap; gap: 8px 10px; white-space: normal; }
   .preview-section { height: auto; padding: 0 16px 12px; }
