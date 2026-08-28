@@ -28,3 +28,12 @@ async def test_system_info_includes_host_metrics(tmp_path: Path, monkeypatch) ->
     assert info.memory_used_bytes == 10 * 1024**3
     assert info.memory_total_bytes == 16 * 1024**3
     assert info.gpus == []
+
+
+async def test_backend_override_requires_a_working_blender_binary(tmp_path: Path) -> None:
+    probe = SystemProbe(tmp_path / "missing-blender", tmp_path, ("CPU",))
+
+    await probe.initialize()
+
+    assert probe.blender_version is None
+    assert probe.available_backends == []

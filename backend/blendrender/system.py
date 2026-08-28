@@ -39,10 +39,10 @@ class SystemProbe:
         if version_code == 0 and version_output:
             first_line = version_output.splitlines()[0]
             self.blender_version = first_line.removeprefix("Blender ").strip()
+        if self.blender_version is None:
+            return
         if self.override:
             self.available_backends = list(dict.fromkeys(Backend(item) for item in self.override))
-            return
-        if self.blender_version is None:
             return
         self.available_backends = [Backend.CPU]
         if not await self.gpus():

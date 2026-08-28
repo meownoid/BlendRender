@@ -13,10 +13,13 @@ from blendrender.config import Settings  # noqa: E402
 
 @pytest.fixture
 def settings(tmp_path: Path) -> Settings:
+    blender_bin = tmp_path / "blender"
+    blender_bin.write_text("#!/bin/sh\nprintf 'Blender 5.2.1\\n'\n", encoding="utf-8")
+    blender_bin.chmod(0o755)
     return Settings(
         app_password="test-password",
         data_root=tmp_path / "data",
-        blender_bin=Path("/usr/bin/true"),
+        blender_bin=blender_bin,
         renderer_script=tmp_path / "render.py",
         frontend_dist=tmp_path / "dist",
         max_upload_bytes=1024 * 1024,

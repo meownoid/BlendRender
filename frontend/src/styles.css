@@ -119,7 +119,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .render-preview img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .render-preview--empty { display: grid; place-items: center; color: #777f87; }
 .render-preview--empty div { display: grid; justify-items: center; gap: 12px; }
-.render-preview--empty svg { animation: spin 1.8s linear infinite; }
+.render-preview--empty.render-preview--active svg { animation: spin 1.8s linear infinite; }
 .progress-row { min-height: 71px; display: flex; align-items: center; gap: 20px; }
 .progress-row > strong { width: 40px; color: var(--accent); font-size: 18px; }
 .progress-track { min-width: 80px; height: 8px; flex: 1; border-radius: 99px; overflow: hidden; background: #30363c; }

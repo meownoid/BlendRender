@@ -65,6 +65,9 @@ just dev-backend
 just dev-frontend
 ```
 
+`just dev-backend` uses the `blender` executable on your `PATH`; set `BLENDER_BIN` if it is
+installed elsewhere.
+
 Open `http://localhost:5173`. Add `?demo=1` for the visual QA dataset without starting a render.
 Run the normal verification suite with:
 

@@ -29,7 +29,8 @@ just dev-frontend
 The backend listens on `http://localhost:8000`; Vite listens on
 `http://localhost:5173` and proxies API requests according to `frontend/vite.config.ts`. The Just
 recipe supplies a development password of `blendrender-dev`, disables secure cookies for local
-HTTP, uses `./data`, and exposes simulated `OPTIX` and `CUDA` backend availability.
+HTTP, uses `./data`, invokes `blender` from your `PATH`, and exposes CPU availability. Set
+`BLENDER_BIN` when Blender is installed somewhere else.
 
 Open `http://localhost:5173/?demo=1` to use deterministic visual QA data. Demo mode is compiled for
 Vite development only and does not submit API jobs.

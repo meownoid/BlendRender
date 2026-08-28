@@ -22,6 +22,12 @@ function statusLine(job: Job) {
   return 'Render failed'
 }
 
+function emptyPreviewMessage(job: Job) {
+  if (job.status === 'running') return 'First frame is rendering'
+  if (job.status === 'queued') return 'Waiting in render queue'
+  return statusLine(job)
+}
+
 export function RenderWorkspace({ job, demo, onCancel, onRetry, onDelete }: RenderWorkspaceProps) {
   const frames = useMemo(() => job?.completed_frames.slice(-5) ?? [], [job?.completed_frames])
   const previewFrame = frames.at(-1)
@@ -44,6 +50,7 @@ export function RenderWorkspace({ job, demo, onCancel, onRetry, onDelete }: Rend
 
   const recoverable = ['failed', 'canceled', 'interrupted'].includes(job.status)
   const deletable = ['completed', 'failed', 'canceled', 'interrupted'].includes(job.status)
+  const previewIsActive = job.status === 'queued' || job.status === 'running'
   return (
     <main className="workspace">
       <section className="job-heading">
@@ -56,8 +63,8 @@ export function RenderWorkspace({ job, demo, onCancel, onRetry, onDelete }: Rend
         </div>
       </section>
       <section className="preview-section">
-        <div className={`render-preview${previewUrl ? '' : ' render-preview--empty'}`}>
-          {previewUrl ? <img src={previewUrl} alt={`Latest rendered frame from ${job.filename}`} /> : <div><RefreshCw size={34} /><span>{job.status === 'queued' ? 'Waiting for GPU' : 'First frame is rendering'}</span></div>}
+        <div className={`render-preview${previewUrl ? '' : ' render-preview--empty'}${previewIsActive ? ' render-preview--active' : ''}`}>
+          {previewUrl ? <img src={previewUrl} alt={`Latest rendered frame from ${job.filename}`} /> : <div><RefreshCw size={34} /><span>{emptyPreviewMessage(job)}</span></div>}
         </div>
         <div className="progress-row">
           <strong>{Math.round(job.progress)}%</strong>
