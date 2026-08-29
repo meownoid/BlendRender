@@ -67,23 +67,3 @@ class SessionManager:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Authentication required",
             )
-
-
-def reject_cross_origin_mutation(request: Request, *, allow_https_origin: bool = False) -> None:
-    if request.method in {"GET", "HEAD", "OPTIONS"}:
-        return
-    origin = request.headers.get("origin")
-    if not origin:
-        return
-    host = request.headers.get("host", request.url.netloc)
-    expected_origins = {f"{request.url.scheme}://{host}"}
-    if allow_https_origin:
-        # Some TLS-terminating proxies omit X-Forwarded-Proto. Secure cookies ensure that
-        # an HTTP origin cannot use an authenticated browser session in this fallback case.
-        expected_origins.add(f"https://{host}")
-    normalized_origin = origin.rstrip("/")
-    if not any(
-        hmac.compare_digest(normalized_origin, expected.rstrip("/"))
-        for expected in expected_origins
-    ):
-        raise HTTPException(status_code=403, detail="Cross-origin request rejected")

@@ -24,10 +24,6 @@ uploaded source projects as well as output and should be protected accordingly.
   rolling minute are rate-limited in that application process.
 - Authentication uses a signed HTTP-only, same-site-strict cookie. It is secure by default and
   expires according to `SESSION_TTL_SECONDS`.
-- Mutating browser requests with an `Origin` different from the current scheme and host are
-  rejected. When secure cookies are enabled, an HTTPS origin on the current host is also accepted
-  if a TLS-terminating proxy fails to forward the original protocol; an HTTP origin cannot use the
-  secure session cookie in that fallback case.
 - Responses set a restrictive content security policy and deny framing, MIME sniffing, referrer
   data, and camera/microphone/geolocation access.
 - Uploaded paths are derived from generated UUIDs. Original filenames are reduced to their base

@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 
-from .auth import SessionManager, reject_cross_origin_mutation
+from .auth import SessionManager
 from .config import Settings
 from .db import Database
 from .models import (
@@ -87,12 +87,7 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
 
     @app.middleware("http")
     async def security_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]
-        try:
-            reject_cross_origin_mutation(request, allow_https_origin=resolved.cookie_secure)
-        except HTTPException as exc:
-            response = JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
-        else:
-            response = await call_next(request)
+        response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "no-referrer"

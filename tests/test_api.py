@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import io
 import zipfile
-from dataclasses import replace
 
 from blendrender.main import create_app
 from blendrender.worker import frame_filename, job_paths
@@ -44,29 +43,6 @@ def test_authentication_and_job_lifecycle(settings) -> None:
         retried = client.post(f"/api/jobs/{job['id']}/retry", json={})
         assert retried.status_code == 200
         assert retried.json()["status"] == "queued"
-
-
-def test_cross_origin_mutation_is_rejected(settings) -> None:
-    app = create_app(settings, start_worker=False)
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/auth/logout",
-            headers={"Origin": "https://malicious.example"},
-        )
-        assert response.status_code == 403
-        assert response.json() == {"detail": "Cross-origin request rejected"}
-        assert response.headers["x-frame-options"] == "DENY"
-
-
-def test_https_origin_is_accepted_when_secure_cookies_are_enabled(settings) -> None:
-    app = create_app(replace(settings, cookie_secure=True), start_worker=False)
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/auth/login",
-            json={"password": "wrong"},
-            headers={"Origin": "https://testserver"},
-        )
-        assert response.status_code == 401
 
 
 def test_system_info_exposes_host_telemetry(settings) -> None:
