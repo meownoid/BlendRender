@@ -88,7 +88,7 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
     @app.middleware("http")
     async def security_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]
         try:
-            reject_cross_origin_mutation(request)
+            reject_cross_origin_mutation(request, allow_https_origin=resolved.cookie_secure)
         except HTTPException as exc:
             response = JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
         else:
