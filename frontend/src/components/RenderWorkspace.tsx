@@ -1,13 +1,11 @@
 import { AlertTriangle, Download, RefreshCw, Trash2, XCircle } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api'
-import { demoRenderUrl } from '../lib/demo'
 import { formatDuration } from '../lib/format'
 import type { Job } from '../types'
 
 interface RenderWorkspaceProps {
   job: Job | null
-  demo: boolean
   onCancel: (job: Job) => Promise<void>
   onRetry: (job: Job) => Promise<void>
   onDelete: (job: Job) => Promise<void>
@@ -28,12 +26,12 @@ function emptyPreviewMessage(job: Job) {
   return statusLine(job)
 }
 
-export function RenderWorkspace({ job, demo, onCancel, onRetry, onDelete }: RenderWorkspaceProps) {
+export function RenderWorkspace({ job, onCancel, onRetry, onDelete }: RenderWorkspaceProps) {
   const frames = useMemo(() => job?.completed_frames.slice(-5) ?? [], [job?.completed_frames])
   const previewFrame = frames.at(-1)
   const [selected, setSelected] = useState<Set<number>>(() => previewFrame == null ? new Set() : new Set([previewFrame]))
   useEffect(() => setSelected(previewFrame == null ? new Set() : new Set([previewFrame])), [job?.id, previewFrame])
-  const previewUrl = demo ? demoRenderUrl : job && previewFrame != null ? api.frameUrl(job.id, previewFrame, true) : null
+  const previewUrl = job && previewFrame != null ? api.frameUrl(job.id, previewFrame, true) : null
 
   if (!job) {
     return <main className="workspace workspace--empty"><div><h1>No render selected</h1><p>Queue a packed .blend file to begin.</p></div></main>
@@ -78,15 +76,15 @@ export function RenderWorkspace({ job, demo, onCancel, onRetry, onDelete }: Rend
         <div className="frames-section__header">
           <h2>Rendered frames</h2>
           <div>
-            <button className="button button--subtle" disabled={!selected.size} onClick={() => { if (!demo) void api.downloadArchive(job, [...selected]) }}><Download size={17} /> Download selected</button>
-            <button className="button button--subtle" disabled={!frames.length} onClick={() => { if (!demo) void api.downloadArchive(job) }}><Download size={17} /> Download all</button>
+            <button className="button button--subtle" disabled={!selected.size} onClick={() => void api.downloadArchive(job, [...selected])}><Download size={17} /> Download selected</button>
+            <button className="button button--subtle" disabled={!frames.length} onClick={() => void api.downloadArchive(job)}><Download size={17} /> Download all</button>
             {deletable ? <button className="icon-button" onClick={() => void onDelete(job)} aria-label="Delete job"><XCircle size={19} /></button> : null}
           </div>
         </div>
         <div className="frame-strip">
           {frames.map((frame) => (
             <button key={frame} className={`frame-tile${selected.has(frame) || frame === previewFrame ? ' is-selected' : ''}`} onClick={() => toggleFrame(frame)}>
-              <img src={demo ? demoRenderUrl : api.frameUrl(job.id, frame, true)} alt="" />
+              <img src={api.frameUrl(job.id, frame, true)} alt="" />
               <span>{String(frame).padStart(4, '0')}</span>
             </button>
           ))}

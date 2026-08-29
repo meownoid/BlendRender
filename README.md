@@ -73,7 +73,7 @@ just dev-frontend
 `just dev-backend` uses the `blender` executable on your `PATH`; set `BLENDER_BIN` if it is
 installed elsewhere.
 
-Open `http://localhost:5173`. Add `?demo=1` for the visual QA dataset without starting a render.
+Open `http://localhost:5173`.
 Run the normal verification suite with:
 
 ```bash
@@ -92,7 +92,6 @@ Detailed setup, commands, and test boundaries are in
 - [Development and testing](docs/development.md) — setup, workflows, test layers, and project map
 - [Deployment and operations](docs/deployment.md) — RunPod, Docker, configuration, and health
 - [Security and rendering](docs/security-and-rendering.md) — trust boundary and scene behavior
-- [Design specification](docs/design/design-spec.md) — accepted UI concepts and visual tokens
 
 Contributor and coding-agent guidance is in [AGENTS.md](AGENTS.md).
 

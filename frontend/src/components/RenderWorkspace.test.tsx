@@ -31,7 +31,7 @@ const failedJob: Job = {
 
 test('shows a terminal empty-preview state for a failed job', () => {
   const { container } = render(
-    <RenderWorkspace job={failedJob} demo={false} onCancel={vi.fn()} onRetry={vi.fn()} onDelete={vi.fn()} />,
+    <RenderWorkspace job={failedJob} onCancel={vi.fn()} onRetry={vi.fn()} onDelete={vi.fn()} />,
   )
 
   expect(container.querySelector('.render-preview')).toHaveTextContent('Render failed')

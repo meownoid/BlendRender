@@ -32,9 +32,6 @@ recipe supplies a development password of `blendrender-dev`, disables secure coo
 HTTP, uses `./data`, invokes `blender` from your `PATH`, and exposes CPU availability. Set
 `BLENDER_BIN` when Blender is installed somewhere else.
 
-Open `http://localhost:5173/?demo=1` to use deterministic visual QA data. Demo mode is compiled for
-Vite development only and does not submit API jobs.
-
 ## Project map
 
 ```text
@@ -43,7 +40,7 @@ frontend/src/              React application and CSS
 renderer/                  Python executed inside Blender
 tests/                     Python unit, API, database, and Blender smoke tests
 scripts/                   Container E2E driver and Colima orchestration
-docs/                      Topic and design documentation
+docs/                      Topic documentation
 Dockerfile                 Production multi-stage image
 Dockerfile.e2e             macOS/Colima test-only image variant
 compose.yaml               Local NVIDIA Docker launch
@@ -51,7 +48,7 @@ Justfile                   Supported development commands
 ```
 
 See [Architecture](architecture.md) before changing the queue, process lifecycle, or on-disk data
-layout. UI changes should follow the [design specification](design/design-spec.md).
+layout.
 
 ## Verification commands
 

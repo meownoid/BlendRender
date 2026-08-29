@@ -14,8 +14,6 @@ TypeScript, Docker, and Just conventions.
   health checks, and platform constraints.
 - [Security and rendering](docs/security-and-rendering.md) for the trust boundary, Blender launch
   contract, retained settings, and output behavior.
-- [Design specification](docs/design/design-spec.md) before changing layout, copy, styling, or UI
-  assets.
 
 The [documentation index](docs/README.md) and root [README](README.md) should remain synchronized
 when a user-facing capability, prerequisite, command, endpoint, or operational behavior changes.

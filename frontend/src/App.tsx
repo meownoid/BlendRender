@@ -3,13 +3,10 @@ import { ApiError, api } from './lib/api'
 import { Dashboard } from './components/Dashboard'
 import { LoginPage } from './components/LoginPage'
 
-const demoMode = import.meta.env.DEV && new URLSearchParams(window.location.search).has('demo')
-
 export default function App() {
-  const [authenticated, setAuthenticated] = useState<boolean | null>(demoMode ? true : null)
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null)
 
   useEffect(() => {
-    if (demoMode) return
     api.session()
       .then(({ authenticated: value }) => setAuthenticated(value))
       .catch(() => setAuthenticated(false))
@@ -26,11 +23,11 @@ export default function App() {
   }
 
   async function logout() {
-    if (!demoMode) await api.logout()
+    await api.logout()
     setAuthenticated(false)
   }
 
   if (authenticated === null) return <div className="boot-screen"><span className="boot-screen__spinner" /><span>Opening BlendRender</span></div>
   if (!authenticated) return <LoginPage onLogin={login} />
-  return <Dashboard demo={demoMode} onLogout={logout} />
+  return <Dashboard onLogout={logout} />
 }
