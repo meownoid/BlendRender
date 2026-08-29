@@ -18,6 +18,7 @@ const cpuOnlySystem: SystemInfo = {
 test('selects CPU when it is the only available backend and submits it', async () => {
   const onSubmit = vi.fn().mockResolvedValue(undefined)
   const { container } = render(<NewRenderPanel open system={cpuOnlySystem} busy={false} onClose={vi.fn()} onSubmit={onSubmit} />)
+  expect(container.querySelector('form')).toHaveAttribute('data-1p-ignore', 'true')
   expect(screen.getByRole('button', { name: 'CPU' })).toHaveClass('is-selected')
   expect(screen.getByRole('button', { name: 'OptiX' })).toBeDisabled()
   const input = container.querySelector('input[type="file"]')

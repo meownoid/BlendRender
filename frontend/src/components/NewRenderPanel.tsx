@@ -64,7 +64,7 @@ export function NewRenderPanel({ open, system, busy, onClose, onSubmit }: NewRen
   return (
     <aside id="new-render-panel" className={`render-panel${open ? ' is-open' : ''}`} hidden={!open} aria-hidden={!open}>
       <div className="render-panel__header"><h2>New render</h2><button className="icon-button" onClick={onClose} aria-label="Close new render panel"><X size={22} /></button></div>
-      <form onSubmit={submit}>
+      <form onSubmit={submit} data-1p-ignore="true">
         <button className={`dropzone${file ? ' has-file' : ''}`} type="button" onClick={() => inputRef.current?.click()} onDrop={drop} onDragOver={(event) => event.preventDefault()}>
           <FileUp size={56} strokeWidth={1.4} />
           {file ? <><strong>{file.name}</strong><span>{formatBytes(file.size)}</span></> : <><span>Drop a packed .blend file</span><span>or <em>choose a file</em></span></>}
