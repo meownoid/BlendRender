@@ -60,8 +60,8 @@ layout.
 | `just e2e-backend` | Real Blender CPU render through the public API in a Colima container |
 
 GitHub Actions runs the equivalent test and check commands for pull requests and trusted pushes.
-Pushes to `main` and `v*` tags then build and publish to the repository's private GHCR package
-after verification succeeds.
+Pushes to `main` and `v*` tags then build and publish to the repository's public GHCR package after
+verification succeeds.
 
 During iteration, narrower commands are useful:
 

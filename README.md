@@ -4,21 +4,13 @@ BlendRender is a self-contained Blender render node for RunPod Pods. One contain
 React dashboard and FastAPI API, queues one Cycles render at a time, invokes Blender 5.2.1 with
 OptiX, CUDA, or CPU, creates WebP previews, and provides PNG or ZIP downloads.
 
-The dashboard exposes OptiX, CUDA, and CPU rendering. Its system control reports server-persisted
-CPU, GPU, host-memory, and GPU-VRAM telemetry; CPU is also used by the container end-to-end test.
-
 ## RunPod quick start
 
-Pushes to `main` and version tags test the project, build a private `linux/amd64` image, and publish
-it to `ghcr.io/OWNER/REPOSITORY`; pull requests run the tests and checks without registry write
-access. The workflow also applies `latest` on `main`, commit-specific tags prefixed with `sha-`,
-and the Git tag for version-tag builds.
-
-1. Use an image published by the workflow, or build and push one manually:
+1. Use an image published by the workflow (`ghcr.io/meownoid/blendrender:latest`), 
+   or build and push one manually:
 
    ```bash
-   docker buildx build --platform linux/amd64 \
-     -t YOUR_REGISTRY/blendrender:0.1.0 --push .
+   docker buildx build --platform linux/amd64 -t YOUR_REGISTRY/blendrender:0.1.0 --push .
    ```
 
 2. Create a RunPod **Pod** template with:
@@ -26,8 +18,7 @@ and the Git tag for version-tag builds.
    - the image tag built above;
    - HTTP port `8000`;
    - at least 20 GB of container disk;
-   - `APP_PASSWORD` set to a long random password; and
-   - no volume mount if job data should remain ephemeral.
+   - `APP_PASSWORD` set to a long random password.
 
 3. Open `https://POD_ID-8000.proxy.runpod.net` and sign in with `APP_PASSWORD`.
 
@@ -35,23 +26,19 @@ Use an RTX-class NVIDIA GPU for OptiX. The dashboard disables backends that Blen
 `GET /healthz` checks the web process; `GET /readyz` succeeds once Blender and at least one render
 backend are available.
 
-See [Deployment and operations](docs/deployment.md) for configuration, storage, health checks,
-private GHCR access, and platform constraints.
-
 ## Render contract
 
 - Upload one `.blend` file with all external assets packed into it.
 - The active scene and camera are used.
-- Resolution, samples, denoising, compositor, and color management are preserved unless an API
-  render override is supplied.
+- Resolution, samples, denoising, compositor, and color management are preserved.
 - The worker overrides the engine, selected compute backend, requested frames, output location,
   and output format (PNG).
 - Embedded Python auto-execution is disabled.
 - A single worker renders one job at a time. Verified completed PNGs are skipped on retry.
-- Job data lives below `/var/lib/blendrender` and lasts only as long as that filesystem.
+- Job data lives under `/var/lib/blendrender` and lasts only as long as that filesystem.
 
-Read [Security and rendering](docs/security-and-rendering.md) before exposing a node or accepting
-files from other people.
+Read [Security](docs/security.md) before exposing a node or accepting files from other people. Read
+[Rendering](docs/rendering.md) before preparing a scene for upload.
 
 ## Local development
 
@@ -91,9 +78,8 @@ Detailed setup, commands, and test boundaries are in
 - [API](docs/api.md) — authentication, endpoints, request fields, and examples
 - [Development and testing](docs/development.md) — setup, workflows, test layers, and project map
 - [Deployment and operations](docs/deployment.md) — RunPod, Docker, configuration, and health
-- [Security and rendering](docs/security-and-rendering.md) — trust boundary and scene behavior
-
-Contributor and coding-agent guidance is in [AGENTS.md](AGENTS.md).
+- [Security](docs/security.md) — trust boundary, authentication, and file handling
+- [Rendering](docs/rendering.md) — scene requirements and Blender output behavior
 
 ## API summary
 

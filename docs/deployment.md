@@ -27,23 +27,14 @@ publishes after verification succeeds:
 - a version tag publishes `ghcr.io/OWNER/REPOSITORY:TAG` and `:sha-COMMIT`.
 
 Repository and owner names are normalized to lowercase for GHCR. The workflow uses its scoped
-`GITHUB_TOKEN`, so no publishing secret is required. GitHub makes a newly published container
-package private by default and links it to the source repository; keep that visibility unchanged
-in the package settings. An existing public package cannot be made private by this workflow.
-
-Consumers must authenticate before pulling the private image. Use a GitHub token that can read the
-package, then pull the desired commit-specific version:
-
-```bash
-echo "$GHCR_TOKEN" | docker login ghcr.io --username YOUR_GITHUB_USERNAME --password-stdin
-docker pull ghcr.io/OWNER/REPOSITORY:sha-COMMIT
-```
+`GITHUB_TOKEN`, so no publishing secret is required.
 
 ## RunPod configuration
 
 Create a RunPod **Pod**, not a serverless endpoint, with:
 
 - the pushed image;
+- configured GHCR credentials if the image is private;
 - an RTX-class NVIDIA GPU for OptiX;
 - HTTP port `8000`;
 - at least 20 GB of container disk, with more for large projects or frame ranges;

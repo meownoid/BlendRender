@@ -12,8 +12,9 @@ TypeScript, Docker, and Just conventions.
 - [Development and testing](docs/development.md) for setup, project layout, and verification.
 - [Deployment and operations](docs/deployment.md) for the image, environment variables, RunPod,
   health checks, and platform constraints.
-- [Security and rendering](docs/security-and-rendering.md) for the trust boundary, Blender launch
-  contract, retained settings, and output behavior.
+- [Security](docs/security.md) for the trust boundary, authentication, and web controls.
+- [Rendering](docs/rendering.md) for the Blender launch contract, retained settings, and output
+  behavior.
 
 The [documentation index](docs/README.md) and root [README](README.md) should remain synchronized
 when a user-facing capability, prerequisite, command, endpoint, or operational behavior changes.

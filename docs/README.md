@@ -9,7 +9,8 @@ for implementation and operational detail.
 | [API](api.md) | Calling the HTTP API and checking field constraints or response shapes |
 | [Development and testing](development.md) | Preparing a workstation, running services, and choosing verification commands |
 | [Deployment and operations](deployment.md) | Building the image, configuring RunPod or Compose, and diagnosing health |
-| [Security and rendering](security-and-rendering.md) | Understanding the trust model, authentication, file handling, and Blender overrides |
+| [Security](security.md) | Understanding the trust model, authentication, and file handling |
+| [Rendering](rendering.md) | Preparing scenes and understanding Blender overrides and outputs |
 
 Repository-specific instructions for contributors and coding agents are in
 [AGENTS.md](../AGENTS.md).
