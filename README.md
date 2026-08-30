@@ -10,7 +10,7 @@ OptiX, CUDA, or CPU, creates WebP previews, and provides PNG or ZIP downloads.
    or build and push one manually:
 
    ```bash
-   docker buildx build --platform linux/amd64 -t YOUR_REGISTRY/blendrender:0.1.0 --push .
+   docker buildx build --platform linux/amd64 -t YOUR_REGISTRY/blendrender:1.0.0 --push .
    ```
 
 2. Create a RunPod **Pod** template with:
