@@ -1,4 +1,4 @@
-import mark from '../assets/blendrender-mark.png'
+import mark from '../assets/blendrender-mark.svg'
 
 export function Brand() {
   return (
