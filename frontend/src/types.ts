@@ -66,3 +66,8 @@ export interface RenderForm {
   resolution_y?: number
   resolution_percentage?: number
 }
+
+export interface UploadProgress {
+  loaded: number
+  total: number | null
+}

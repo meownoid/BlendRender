@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../lib/api'
 import { deserializeResourceHistory, type ResourceSample } from '../lib/resourceHistory'
-import type { Job, RenderForm, SystemInfo } from '../types'
+import type { Job, RenderForm, SystemInfo, UploadProgress } from '../types'
 import { AppHeader } from './AppHeader'
 import { JobRail } from './JobRail'
 import { NewRenderPanel } from './NewRenderPanel'
@@ -23,6 +23,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
   const [filter, setFilter] = useState<Filter>('all')
   const [sidePanel, setSidePanel] = useState<SidePanel>('new-render')
   const [queueing, setQueueing] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null)
   const [error, setError] = useState('')
 
   const refresh = useCallback(async () => {
@@ -65,12 +66,14 @@ export function Dashboard({ onLogout }: DashboardProps) {
 
   async function createJob(form: RenderForm) {
     setQueueing(true)
+    setUploadProgress({ loaded: 0, total: null })
     try {
-      const job = await api.createJob(form)
+      const job = await api.createJob(form, setUploadProgress)
       setJobs((current) => [job, ...current])
       setSelectedId(job.id)
     } finally {
       setQueueing(false)
+      setUploadProgress(null)
     }
   }
 
@@ -92,7 +95,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
       <div className="app-body">
         <JobRail jobs={jobs} selectedId={selectedId} filter={filter} onFilter={setFilter} onSelect={setSelectedId} />
         <RenderWorkspace job={selectedJob} onCancel={(job) => applyJobAction(job, api.cancel)} onRetry={(job) => applyJobAction(job, api.retry)} onDelete={deleteJob} />
-        <NewRenderPanel open={sidePanel === 'new-render'} system={system} busy={queueing} onClose={() => setSidePanel(null)} onSubmit={createJob} />
+        <NewRenderPanel open={sidePanel === 'new-render'} system={system} busy={queueing} uploadProgress={uploadProgress} onClose={() => setSidePanel(null)} onSubmit={createJob} />
         <SystemPanel open={sidePanel === 'system'} system={system} samples={resourceHistory} onClose={() => setSidePanel(null)} />
       </div>
     </div>

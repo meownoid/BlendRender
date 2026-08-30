@@ -141,6 +141,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .render-panel__header p { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
 .dropzone { width: 100%; height: 224px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; border: 1px dashed #4c545d; border-radius: 9px; color: #a6adb4; background: rgba(12,15,18,.28); cursor: pointer; }
 .dropzone:hover { border-color: var(--accent); }
+.dropzone:disabled { opacity: .55; cursor: not-allowed; }
 .dropzone em { color: var(--accent); font-style: normal; }
 .dropzone strong { max-width: 90%; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
 .dropzone span { font-size: 14px; }
@@ -160,6 +161,14 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .field input { width: 100%; height: 42px; padding: 0 13px; border: 1px solid var(--line); border-radius: 5px; color: var(--text); background: #15191e; font-size: 14px; }
 .render-panel__error { min-height: 48px; padding-top: 12px; color: #ff8179; font-size: 12px; }
 .render-panel__submit { width: 100%; }
+.upload-progress { margin-top: 18px; }
+.upload-progress__labels { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; font-size: 12px; }
+.upload-progress__labels strong { color: var(--accent); font-weight: 620; }
+.upload-progress__labels span { color: var(--muted); white-space: nowrap; }
+.upload-progress__track { height: 7px; overflow: hidden; border-radius: 99px; background: #30363c; }
+.upload-progress__track span { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #ff971f, #ff8920); transition: width .2s ease; }
+.upload-progress--indeterminate .upload-progress__track span { width: 34%; animation: upload-indeterminate 1.2s ease-in-out infinite; }
+@keyframes upload-indeterminate { from { transform: translateX(-100%); } to { transform: translateX(295%); } }
 .system-panel { padding-left: 22px; padding-right: 22px; }
 .system-panel__plots { display: grid; gap: 17px; }
 .system-panel__loading { min-height: 220px; display: grid; place-content: center; justify-items: center; gap: 12px; color: var(--muted); font-size: 13px; text-align: center; }
@@ -217,6 +226,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   .frame-strip { display: flex; overflow-x: auto; }
   .frame-tile { min-width: 145px; }
   .render-panel { top: 66px; width: min(390px, 100vw); }
+  .upload-progress__labels { align-items: flex-start; flex-direction: column; gap: 3px; }
   .login-shell__brand { top: 28px; left: 24px; }
   .login-shell__image { object-position: 68% center; opacity: .4; }
   .login-shell__shade { background: rgba(7,9,11,.72); }
@@ -228,4 +238,5 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  .upload-progress--indeterminate .upload-progress__track span { transform: translateX(98%); }
 }
