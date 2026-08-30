@@ -40,6 +40,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && mkdir -p /opt/blender \
     && tar -xJf /tmp/blender.tar.xz --strip-components=1 -C /opt/blender \
     && rm /tmp/blender.tar.xz \
+    && find /opt/blender -type f -name '*.a' -delete \
+    && rm -rf /opt/blender/5.2/datafiles/locale \
     && apt-get purge -y --auto-remove curl xz-utils \
     && rm -rf /var/lib/apt/lists/*
 

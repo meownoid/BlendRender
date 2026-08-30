@@ -6,6 +6,10 @@ The production `Dockerfile` builds the Vite frontend, creates a locked Python en
 the pinned Blender 5.2.1 Linux x64 archive with SHA-256 verification, and runs the final container as
 UID/GID `10001` under `tini`.
 
+The image is a headless render worker, not an interactive Blender workstation. It retains the Blender
+runtime, bundled Python, color data, and CPU/CUDA/OptiX kernels, while omitting Blender's static
+development libraries and UI translations.
+
 Build and push the required platform explicitly:
 
 ```bash
