@@ -4,6 +4,7 @@ import asyncio
 import os
 import shutil
 import tempfile
+import unicodedata
 import uuid
 import zipfile
 from collections.abc import AsyncIterator
@@ -11,7 +12,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Literal
 
-from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
@@ -142,9 +143,11 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
 
     @app.post("/api/scenes", response_model=Scene, status_code=201)
     async def create_scene(
-        file: Annotated[UploadFile, File()], _: None = Depends(require_auth)
+        file: Annotated[UploadFile, File()],
+        name: Annotated[str | None, Form()] = None,
+        _: None = Depends(require_auth),
     ) -> Scene:
-        original_name = Path(file.filename or "").name
+        original_name = _sanitize_scene_name(file.filename or "")
         suffix = Path(original_name).suffix.lower()
         if suffix not in {".blend", ".zip"}:
             raise HTTPException(
@@ -191,6 +194,7 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
             scene = SceneManifest(
                 id=scene_id,
                 filename=Path(entrypoint).name,
+                name=_sanitize_scene_name(name or "") or original_name,
                 source_kind=source_kind,
                 entrypoint=entrypoint,
                 created_at=utc_now(),
@@ -238,7 +242,7 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
         job = JobManifest(
             id=str(uuid.uuid4()),
             scene_id=scene.id,
-            filename=scene.filename,
+            filename=scene.name,
             owner_pod_id=resolved.pod_id,
             mode=payload.mode,
             frame_start=frame_start,
@@ -369,11 +373,11 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
             raise HTTPException(
                 status_code=422, detail="One or more requested results are unavailable"
             )
-        archive_path = await asyncio.to_thread(_create_archive, store, selected, scene.filename)
+        archive_path = await asyncio.to_thread(_create_archive, store, selected, scene.name)
         return FileResponse(
             archive_path,
             media_type="application/zip",
-            filename=f"{Path(scene.filename).stem}-results.zip",
+            filename=f"{Path(scene.name).stem}-results.zip",
             background=BackgroundTask(archive_path.unlink, missing_ok=True),
         )
 
@@ -425,6 +429,12 @@ async def _require_scene(store: WorkspaceStore, scene_id: str) -> Scene:
         return await asyncio.to_thread(store.get_scene, scene_id)
     except (NotFoundError, WorkspaceError) as exc:
         raise HTTPException(status_code=404, detail="Scene not found") from exc
+
+
+def _sanitize_scene_name(value: str) -> str:
+    basename = unicodedata.normalize("NFKC", value).replace("\\", "/").rsplit("/", 1)[-1]
+    printable = "".join(character if character.isprintable() else " " for character in basename)
+    return " ".join(printable.split()).strip(" .")[:200].rstrip()
 
 
 async def _require_job(store: WorkspaceStore, job_id: str) -> Job:

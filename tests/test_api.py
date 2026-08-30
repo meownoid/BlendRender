@@ -15,9 +15,16 @@ def login(client: TestClient) -> None:
 
 
 def upload_scene(
-    client: TestClient, filename: str = "scene.blend", content: bytes = b"blend"
+    client: TestClient,
+    filename: str = "scene.blend",
+    content: bytes = b"blend",
+    name: str | None = None,
 ) -> dict:
-    response = client.post("/api/scenes", files={"file": (filename, content)})
+    response = client.post(
+        "/api/scenes",
+        files={"file": (filename, content)},
+        data={} if name is None else {"name": name},
+    )
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -28,6 +35,7 @@ def test_scene_upload_then_local_job_creation(settings) -> None:
         login(client)
         scene = upload_scene(client)
         assert scene["filename"] == "input.blend"
+        assert scene["name"] == "scene.blend"
         created = client.post(
             "/api/jobs",
             json={
@@ -43,6 +51,17 @@ def test_scene_upload_then_local_job_creation(settings) -> None:
         assert job["owner_pod_id"] == "pod-a"
         assert job["scene_id"] == scene["id"]
         assert client.get("/api/scenes").json()[0]["job_count"] == 1
+
+
+def test_scene_upload_uses_optional_name_and_sanitizes_fallback(settings) -> None:
+    app = create_app(settings, start_worker=False)
+    with TestClient(app) as client:
+        login(client)
+        named = upload_scene(client, "source.blend", name="  ../ Hero\tShot  ")
+        fallback = upload_scene(client, "folder\\Forest Scene.blend", name="   ")
+
+        assert named["name"] == "Hero Shot"
+        assert fallback["name"] == "Forest Scene.blend"
 
 
 def test_zip_scene_preserves_entrypoint_and_resources(settings) -> None:

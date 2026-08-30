@@ -27,8 +27,8 @@ read its contents.
   expires according to `SESSION_TTL_SECONDS`.
 - Responses set a restrictive content security policy and deny framing, MIME sniffing, referrer
   data, and camera/microphone/geolocation access.
-- Uploaded paths are derived from generated UUIDs. Original filenames are reduced to their base
-  name and are used only as metadata/download naming.
+- Uploaded paths are derived from generated UUIDs. Scene display names and original filenames are
+  reduced to a printable base name and are used only as metadata/download naming.
 - Uploads are streamed and size-limited. Project ZIPs are limited by both compressed upload and
   extracted regular-file size, then extracted only after rejecting encrypted, special, duplicate,
   absolute, and traversal entries. Archive selections must refer to available frames.

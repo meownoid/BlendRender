@@ -63,12 +63,12 @@ export function Dashboard({ onLogout }: DashboardProps) {
     api.frames(selectedSceneId).then((page) => setFrames(page.items)).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load scene results'))
   }, [selectedSceneId, jobs])
 
-  async function uploadScene(file: File) {
+  async function uploadScene(file: File, name: string) {
     setBusy(true); setUploadProgress({ loaded: 0, total: file.size })
-    try { const scene = await api.uploadScene(file, setUploadProgress); await refresh(); setSelectedSceneId(scene.id); setPanel('job') } finally { setBusy(false); setUploadProgress(null) }
+    try { const scene = await api.uploadScene(file, name, setUploadProgress); await refresh(); setSelectedSceneId(scene.id); setPanel('job') } finally { setBusy(false); setUploadProgress(null) }
   }
   async function createJob(form: CreateJobForm) { setBusy(true); try { await api.createJob(form); await refresh(); setPanel(null) } finally { setBusy(false) } }
-  async function deleteScene(scene: Scene) { if (!window.confirm(`Delete ${scene.filename}, all results, and terminal jobs?`)) return; await api.deleteScene(scene.id); await refresh() }
+  async function deleteScene(scene: Scene) { if (!window.confirm(`Delete ${scene.name}, all results, and terminal jobs?`)) return; await api.deleteScene(scene.id); await refresh() }
   async function updateJob(job: Job, action: (id: string) => Promise<Job>) { await action(job.id); await refresh() }
   async function deleteJob(job: Job) { if (!window.confirm(`Delete job ${job.id.slice(0, 8)}? Published scene results remain.`)) return; await api.deleteJob(job.id); await refresh() }
   const latest = resourceHistory.at(-1)

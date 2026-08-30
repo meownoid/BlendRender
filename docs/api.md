@@ -5,9 +5,10 @@ Mutating browser requests must be same-origin.
 
 ## Scenes
 
-`POST /api/scenes` accepts multipart `file` only. The file must be a non-empty `.blend` or project
-ZIP containing exactly one `.blend` and safe relative assets. It returns a scene object. Uploading
-a scene never queues a render.
+`POST /api/scenes` accepts multipart `file` and an optional `name`. The file must be a non-empty
+`.blend` or project ZIP containing exactly one `.blend` and safe relative assets. A blank or omitted
+name defaults to the sanitized uploaded filename. It returns a scene object. Uploading a scene never
+queues a render.
 
 `GET /api/scenes` lists shared scenes. `GET /api/scenes/{id}` returns one. `DELETE /api/scenes/{id}`
 removes its source, results, and terminal jobs; it returns `409` while any associated job is queued

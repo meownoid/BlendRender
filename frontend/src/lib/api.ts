@@ -39,7 +39,7 @@ function responseError(response: XMLHttpRequest): ApiError {
   }
 }
 
-function uploadScene(file: File, onProgress?: (progress: UploadProgress) => void): Promise<Scene> {
+function uploadScene(file: File, name: string, onProgress?: (progress: UploadProgress) => void): Promise<Scene> {
   return new Promise((resolve, reject) => {
     const response = new XMLHttpRequest()
     response.open('POST', '/api/scenes')
@@ -52,6 +52,7 @@ function uploadScene(file: File, onProgress?: (progress: UploadProgress) => void
     })
     const body = new FormData()
     body.append('file', file)
+    if (name.trim()) body.append('name', name)
     response.send(body)
   })
 }
@@ -85,7 +86,7 @@ export const api = {
     })
     if (!response.ok) throw responseError({ status: response.status, responseText: await response.text() } as XMLHttpRequest)
     const blob = await response.blob()
-    downloadBlob(blob, `${scene.filename.replace(/\.blend$/i, '')}-results.zip`)
+    downloadBlob(blob, `${scene.name.replace(/\.blend$/i, '')}-results.zip`)
   },
   downloadJobArchive: async (job: Job) => {
     const response = await fetch(`/api/jobs/${job.id}/archive`, {

@@ -14,6 +14,7 @@ vi.mock('../lib/api', () => ({
 const scene = {
   id: 'scene-1',
   filename: 'city.blend',
+  name: 'City at night',
   source_kind: 'blend' as const,
   entrypoint: 'input.blend',
   created_at: '2026-01-01T00:00:00Z',
@@ -63,6 +64,7 @@ test('renders every result variant for a frame and downloads a selection', () =>
   )
 
   expect(screen.getByText('Frame 0012')).toBeVisible()
+  expect(screen.getByRole('heading', { name: 'City at night' })).toBeVisible()
   expect(screen.getByText('AMD EPYC')).toBeVisible()
   expect(screen.getByText('NVIDIA RTX 6000 Ada')).toBeVisible()
   expect(screen.getByText('64 samples')).toBeVisible()

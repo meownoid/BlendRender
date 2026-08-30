@@ -49,7 +49,7 @@ export function NewJobPanel({ open, scene, system, busy, onClose, onSubmit }: Ne
   }
   return <aside className="side-panel" aria-label="New render job">
     <header><h2>New render</h2><button className="icon-button" onClick={onClose}><X /></button></header>
-    <label className="field">Scene<input readOnly value={scene?.filename ?? 'No scene selected'} /></label>
+    <label className="field">Scene<input readOnly value={scene?.name ?? 'No scene selected'} /></label>
     <fieldset><legend>Render type</legend><div className="segmented"><button className={mode === 'still' ? 'is-selected' : ''} onClick={() => setMode('still')}>Still</button><button className={mode === 'range' ? 'is-selected' : ''} onClick={() => setMode('range')}>Range</button></div></fieldset>
     {mode === 'still' ? <label className="field"><span>Frame</span><input type="number" value={frame} onChange={(event) => setFrame(Number(event.target.value))} /></label> : <div className="range-fields"><label className="field"><span>Start</span><input type="number" value={start} onChange={(event) => setStart(Number(event.target.value))} /></label><label className="field"><span>End</span><input type="number" value={end} onChange={(event) => setEnd(Number(event.target.value))} /></label></div>}
     <fieldset><legend>Backend on this pod</legend><div className="segmented segmented--three">{(['OPTIX', 'CUDA', 'CPU'] as Backend[]).map((item) => <button key={item} disabled={!system?.available_backends.includes(item)} className={backend === item ? 'is-selected' : ''} onClick={() => setBackend(item)}>{item === 'OPTIX' ? 'OptiX' : item}</button>)}</div></fieldset>

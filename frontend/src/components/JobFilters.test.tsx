@@ -7,8 +7,8 @@ import { JobFilters } from './JobFilters'
 const emptyJobFilters = { sceneId: '', status: '', backend: '', podId: '' } as const
 
 const scenes: Scene[] = [
-  { id: 'scene-1', filename: 'first.blend', source_kind: 'blend', entrypoint: 'first.blend', created_at: '2026-01-01T00:00:00Z', size_bytes: 100, job_count: 1, result_count: 0 },
-  { id: 'scene-2', filename: 'second.blend', source_kind: 'blend', entrypoint: 'second.blend', created_at: '2026-01-01T00:00:00Z', size_bytes: 100, job_count: 1, result_count: 0 },
+  { id: 'scene-1', filename: 'first.blend', name: 'First scene', source_kind: 'blend', entrypoint: 'first.blend', created_at: '2026-01-01T00:00:00Z', size_bytes: 100, job_count: 1, result_count: 0 },
+  { id: 'scene-2', filename: 'second.blend', name: 'Second scene', source_kind: 'blend', entrypoint: 'second.blend', created_at: '2026-01-01T00:00:00Z', size_bytes: 100, job_count: 1, result_count: 0 },
 ]
 
 const jobs: Job[] = [
@@ -22,7 +22,7 @@ test('offers the shared job dimensions and updates the selected filter', () => {
 
   fireEvent.change(screen.getByLabelText('Backend'), { target: { value: 'OPTIX' } })
 
-  expect(screen.getByLabelText('Scene')).toHaveTextContent('first.blend')
+  expect(screen.getByLabelText('Scene')).toHaveTextContent('First scene')
   expect(screen.getByLabelText('Status')).toHaveTextContent('running')
   expect(screen.getByLabelText('Pod')).toHaveTextContent('pod-a')
   expect(onChange).toHaveBeenCalledWith({ ...emptyJobFilters, backend: 'OPTIX' })

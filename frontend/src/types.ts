@@ -4,6 +4,7 @@ export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancele
 export interface Scene {
   id: string
   filename: string
+  name: string
   source_kind: 'blend' | 'zip'
   entrypoint: string
   created_at: string

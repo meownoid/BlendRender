@@ -7,6 +7,7 @@ import { JobsView } from './JobsView'
 const scene: Scene = {
   id: 'scene-1',
   filename: 'input.blend',
+  name: 'City at night',
   source_kind: 'blend',
   entrypoint: 'input.blend',
   created_at: '2026-01-01T00:00:00Z',
@@ -57,7 +58,7 @@ test('opens a failed job to show its failure reason and log', () => {
     />,
   )
 
-  const row = screen.getByRole('row', { name: /input\.blend.*failed/i })
+  const row = screen.getByRole('row', { name: /City at night.*failed/i })
   expect(screen.queryByText('Failure details')).not.toBeInTheDocument()
 
   fireEvent.click(row)
@@ -80,7 +81,7 @@ test('opens and closes job details with the keyboard', () => {
     />,
   )
 
-  const row = screen.getByRole('row', { name: /input\.blend.*failed/i })
+  const row = screen.getByRole('row', { name: /City at night.*failed/i })
   fireEvent.keyDown(row, { key: 'Enter' })
   expect(screen.getByText('Failure details')).toBeVisible()
 

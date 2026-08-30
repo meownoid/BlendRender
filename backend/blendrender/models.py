@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Final, Literal
+from typing import Final, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 WORKSPACE_SCHEMA_VERSION: Final = 2
 
@@ -46,12 +46,19 @@ class Scene(BaseModel):
 
     id: str
     filename: str
+    name: str = ""
     source_kind: Literal["blend", "zip"]
     entrypoint: str
     created_at: str
     size_bytes: int = Field(ge=0)
     job_count: int = Field(default=0, ge=0)
     result_count: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def use_filename_as_legacy_name(self) -> Self:
+        if not self.name:
+            self.name = self.filename
+        return self
 
 
 class SceneManifest(Scene):

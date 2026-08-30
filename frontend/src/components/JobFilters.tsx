@@ -21,7 +21,7 @@ const backends: Backend[] = ['OPTIX', 'CUDA', 'CPU']
 
 export function JobFilters({ jobs, scenes, filters, onChange }: JobFiltersProps) {
   const options = useMemo(() => {
-    const sceneNames = new Map(scenes.map((scene) => [scene.id, scene.filename]))
+    const sceneNames = new Map(scenes.map((scene) => [scene.id, scene.name]))
     const sceneIds = new Set<string>()
     const jobStatuses = new Set<JobStatus>()
     const jobBackends = new Set<Backend>()

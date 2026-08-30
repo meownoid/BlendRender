@@ -14,7 +14,7 @@ interface JobsViewProps {
 }
 
 export function JobsView({ jobs, scenes, podId, onCancel, onRetry, onDelete }: JobsViewProps) {
-  const sceneNames = new Map(scenes.map((scene) => [scene.id, scene.filename]))
+  const sceneNames = new Map(scenes.map((scene) => [scene.id, scene.name]))
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   function selectJob(jobId: string) {

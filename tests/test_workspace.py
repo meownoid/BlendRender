@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import time
 
@@ -40,6 +41,19 @@ def create_scene(store: WorkspaceStore, identifier: str) -> None:
         ),
         staging,
     )
+
+
+def test_legacy_scene_manifest_uses_filename_as_name(settings) -> None:
+    store = WorkspaceStore(settings)
+    store.initialize()
+    scene_id = "00000000-0000-4000-8000-000000000200"
+    create_scene(store, scene_id)
+    manifest_path = store.scene_paths(scene_id)["manifest"]
+    manifest = json.loads(manifest_path.read_text())
+    manifest.pop("name")
+    manifest_path.write_text(json.dumps(manifest))
+
+    assert store.get_scene(scene_id).name == "input.blend"
 
 
 def test_two_pods_share_scenes_but_claim_only_their_own_jobs(settings) -> None:
