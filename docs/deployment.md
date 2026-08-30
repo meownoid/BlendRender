@@ -11,6 +11,50 @@ Each Pod is a complete dashboard/API instance and renders only jobs created thro
 Use multiple Pod dashboards to run multiple jobs for the same scene in parallel. A network-volume
 Pod cannot be stopped, only terminated; terminated-owner jobs remain shared read-only history.
 
+## Production image
+
+The production `Dockerfile` builds the Vite frontend, creates a locked Python environment, and
+downloads the pinned Blender 5.2.1 Linux x64 archive with SHA-256 verification. It creates the
+shared workspace subdirectory before dropping to UID/GID `10001` under `tini`.
+
+Build and push the required platform explicitly:
+
+```bash
+docker buildx build --platform linux/amd64 \
+  -t YOUR_REGISTRY/blendrender:1.0.0 --push .
+```
+
+Blender 5.2.1 is published for Linux x64 in this build, so the production target is
+`linux/amd64` even when the build host is Apple Silicon.
+
+## GitHub Actions and GHCR
+
+The `Test and publish image` workflow runs the unit tests, static checks, and frontend production
+build for pull requests, pushes to `main`, and tags beginning with `v`. Pull requests receive only
+read access and stop after verification. For trusted pushes, a production container build then
+publishes after verification succeeds:
+
+- a push to `main` publishes `ghcr.io/OWNER/REPOSITORY:main`, `:latest`, and `:sha-COMMIT`;
+- a version tag publishes `ghcr.io/OWNER/REPOSITORY:TAG` and `:sha-COMMIT`.
+
+Repository and owner names are normalized to lowercase for GHCR. The workflow uses its scoped
+`GITHUB_TOKEN`, so no publishing secret is required.
+
+## RunPod configuration
+
+Create a RunPod **Pod**, not a serverless endpoint, with:
+
+- the pushed image;
+- configured GHCR credentials if the image is private;
+- an RTX-class NVIDIA GPU for OptiX;
+- HTTP port `8000`;
+- at least 20 GB of container disk, with more for large projects or frame ranges;
+- a long, random `APP_PASSWORD`; and
+- the same Secure Cloud network volume mounted at `/workspace` as its peer Pods.
+
+Open the node through `https://POD_ID-8000.proxy.runpod.net`. Keep `COOKIE_SECURE=true` behind the
+RunPod HTTPS proxy.
+
 ## Environment
 
 | Variable | Default | Purpose |
