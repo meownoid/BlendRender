@@ -34,6 +34,8 @@ def test_authentication_and_job_lifecycle(settings) -> None:
         assert job["status"] == "queued"
         assert job["frame_start"] == 1
         assert job["samples"] is None
+        assert job["sample_current"] is None
+        assert job["sample_total"] is None
         assert job["resolution_x"] is None
         assert job["resolution_y"] is None
         assert job["resolution_percentage"] is None

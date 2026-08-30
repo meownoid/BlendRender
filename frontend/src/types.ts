@@ -15,6 +15,8 @@ export interface Job {
   resolution_percentage: number | null
   progress: number
   current_frame: number | null
+  sample_current: number | null
+  sample_total: number | null
   completed_frames: number[]
   error: string | null
   log_tail: string

@@ -12,7 +12,12 @@ interface RenderWorkspaceProps {
 }
 
 function statusLine(job: Job) {
-  if (job.status === 'running') return `Rendering frame ${job.current_frame ?? job.frame_start} of ${job.frame_end}`
+  if (job.status === 'running') {
+    const frame = `Rendering frame ${job.current_frame ?? job.frame_start} of ${job.frame_end}`
+    return job.sample_current != null && job.sample_total != null
+      ? `${frame} · Sample ${job.sample_current} of ${job.sample_total}`
+      : frame
+  }
   if (job.status === 'queued') return 'Waiting in render queue'
   if (job.status === 'completed') return `Rendered ${job.completed_frames.length} ${job.completed_frames.length === 1 ? 'frame' : 'frames'}`
   if (job.status === 'interrupted') return 'Render interrupted'

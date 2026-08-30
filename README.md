@@ -33,6 +33,7 @@ backend are available.
 - Resolution, samples, denoising, compositor, and color management are preserved.
 - The worker overrides the engine, selected compute backend, requested frames, output location,
   and output format (PNG).
+- While a frame renders, the dashboard shows its current and total Cycles samples.
 - Embedded Python auto-execution is disabled.
 - A single worker renders one job at a time. Verified completed PNGs are skipped on retry.
 - Job data lives under `/var/lib/blendrender` and lasts only as long as that filesystem.

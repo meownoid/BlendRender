@@ -58,6 +58,8 @@ const job: Job = {
   resolution_percentage: null,
   progress: 0,
   current_frame: null,
+  sample_current: null,
+  sample_total: null,
   completed_frames: [],
   error: null,
   log_tail: '',

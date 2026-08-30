@@ -117,8 +117,9 @@ curl --fail --silent --show-error \
 | `DELETE /api/jobs/{id}` | Deletes a terminal job and its files; active states return `409` |
 
 The job response includes identifiers and requested settings, `status`, `progress`, current and
-completed frames, timestamps, elapsed/estimated seconds, an error message, a bounded `log_tail`,
-and `cancel_requested`. Timestamps are UTC ISO 8601 strings.
+completed frames, current-frame sample telemetry (`sample_current` and `sample_total` while
+available), timestamps, elapsed/estimated seconds, an error message, a bounded `log_tail`, and
+`cancel_requested`. Timestamps are UTC ISO 8601 strings.
 
 ## Frames and archives
 

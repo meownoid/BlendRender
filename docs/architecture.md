@@ -28,7 +28,8 @@ render worker owns the queue.
 4. Blender starts in background mode with `--disable-autoexec` and executes the Blender-side
    runner against the uploaded scene.
 5. The runner emits `BLENDRENDER_EVENT` JSON lines. The worker also parses Blender sample output,
-   stores progress and a bounded log tail, and appends the complete output to `render.log`.
+   stores progress, current/total frame samples, and a bounded log tail, and appends the complete
+   output to `render.log`.
 6. Each frame-completion event causes the PNG to be checked with Pillow. A maximum 720×480 WebP
    preview is generated for a valid output frame.
 7. The telemetry collector samples the node every 5 seconds while jobs are queued or running and

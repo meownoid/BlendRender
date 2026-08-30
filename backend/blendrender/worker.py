@@ -158,8 +158,8 @@ class RenderWorker:
         elapsed_task: asyncio.Task[None] | None = None
 
         async def update_sample_progress(
-            sample_current: int,
-            sample_total: int,
+            sample_current: int | None,
+            sample_total: int | None,
             frame_remaining_seconds: float | None = None,
         ) -> None:
             nonlocal last_progress_update
@@ -171,19 +171,21 @@ class RenderWorker:
             await self.database.update(
                 job.id,
                 current_frame=current_frame,
+                sample_current=sample_current,
+                sample_total=sample_total,
                 progress=overall_progress(
                     completed_count=len(completed),
                     total_frames=job.total_frames,
-                    sample_current=sample_current,
-                    sample_total=sample_total,
+                    sample_current=sample_current or 0,
+                    sample_total=sample_total or 1,
                 ),
                 elapsed_seconds=now - started,
                 eta_seconds=estimate_remaining_seconds(
                     elapsed_seconds=now - started,
                     completed_count=len(completed),
                     total_frames=job.total_frames,
-                    sample_current=sample_current,
-                    sample_total=sample_total,
+                    sample_current=sample_current or 0,
+                    sample_total=sample_total or 1,
                     frame_average_seconds=average,
                     frame_remaining_seconds=frame_remaining_seconds,
                 ),
@@ -217,6 +219,8 @@ class RenderWorker:
                             await self.database.update(
                                 job.id,
                                 current_frame=current_frame,
+                                sample_current=None,
+                                sample_total=None,
                                 log_tail=log_tail,
                             )
                         elif event_type == "frame_completed":
@@ -243,6 +247,8 @@ class RenderWorker:
                             await self.database.update(
                                 job.id,
                                 progress=len(completed) / job.total_frames * 100,
+                                sample_current=None,
+                                sample_total=None,
                                 completed_frames=completed,
                                 elapsed_seconds=time.monotonic() - started,
                                 eta_seconds=eta,
@@ -250,8 +256,7 @@ class RenderWorker:
                             )
                         elif event_type == "frame_progress":
                             current_frame = int(parsed.event["frame"])
-                            sample_current = int(parsed.event.get("sample_current", 0))
-                            sample_total = int(parsed.event.get("sample_total", 1))
+                            sample_current, sample_total = _event_sample_progress(parsed.event)
                             reported_remaining = parsed.event.get("remaining_seconds")
                             frame_remaining_seconds = (
                                 float(reported_remaining)
@@ -295,6 +300,8 @@ class RenderWorker:
                 status=final_status,
                 progress=100 if final_status == JobStatus.COMPLETED else latest.progress,
                 current_frame=None,
+                sample_current=None,
+                sample_total=None,
                 completed_frames=completed,
                 error=error,
                 finished_at=utc_now(),
@@ -310,6 +317,8 @@ class RenderWorker:
                     status=JobStatus.FAILED,
                     error=f"Unable to run Blender: {exc}",
                     finished_at=utc_now(),
+                    sample_current=None,
+                    sample_total=None,
                     elapsed_seconds=time.monotonic() - started,
                     log_tail=log_tail,
                 )
@@ -350,6 +359,22 @@ def delete_job_files(settings: Settings, job_id: str) -> None:
     if root.parent != settings.jobs_root or not root.name == job_id:
         raise ValueError("Unsafe job path")
     shutil.rmtree(root, ignore_errors=True)
+
+
+def _event_sample_progress(event: dict[str, object]) -> tuple[int | None, int | None]:
+    sample_current = event.get("sample_current")
+    sample_total = event.get("sample_total")
+    if (
+        not isinstance(sample_current, int)
+        or isinstance(sample_current, bool)
+        or not isinstance(sample_total, int)
+        or isinstance(sample_total, bool)
+        or sample_current < 0
+        or sample_total <= 0
+        or sample_current > sample_total
+    ):
+        return None, None
+    return sample_current, sample_total
 
 
 def _summarize_failure(log_tail: str, return_code: int) -> str:

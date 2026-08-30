@@ -50,6 +50,8 @@ class Job(BaseModel):
     resolution_percentage: int | None = None
     progress: float = Field(ge=0, le=100)
     current_frame: int | None = None
+    sample_current: int | None = Field(default=None, ge=0)
+    sample_total: int | None = Field(default=None, gt=0)
     completed_frames: list[int] = Field(default_factory=list)
     error: str | None = None
     log_tail: str = ""

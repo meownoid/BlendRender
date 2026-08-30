@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     resolution_percentage INTEGER,
     progress REAL NOT NULL DEFAULT 0,
     current_frame INTEGER,
+    sample_current INTEGER,
+    sample_total INTEGER,
     completed_frames TEXT NOT NULL DEFAULT '[]',
     error TEXT,
     log_tail TEXT NOT NULL DEFAULT '',
@@ -67,6 +69,8 @@ class Database:
                 "resolution_x",
                 "resolution_y",
                 "resolution_percentage",
+                "sample_current",
+                "sample_total",
             ):
                 if name not in columns:
                     await connection.execute(f"ALTER TABLE jobs ADD COLUMN {name} INTEGER")
@@ -75,7 +79,8 @@ class Database:
             await connection.execute(
                 """
                 UPDATE jobs
-                SET status = ?, error = ?, finished_at = ?, cancel_requested = 0
+                SET status = ?, error = ?, finished_at = ?, cancel_requested = 0,
+                    sample_current = NULL, sample_total = NULL
                 WHERE status = ?
                 """,
                 (
@@ -216,7 +221,7 @@ class Database:
                 """
                 UPDATE jobs
                 SET status = ?, started_at = ?, finished_at = NULL, error = NULL,
-                    cancel_requested = 0
+                    cancel_requested = 0, sample_current = NULL, sample_total = NULL
                 WHERE id = ? AND status = ?
                 """,
                 (JobStatus.RUNNING, utc_now(), row["id"], JobStatus.QUEUED),
@@ -234,6 +239,8 @@ class Database:
             "status",
             "progress",
             "current_frame",
+            "sample_current",
+            "sample_total",
             "completed_frames",
             "error",
             "log_tail",
@@ -284,6 +291,8 @@ class Database:
             status=JobStatus.QUEUED,
             progress=progress,
             current_frame=None,
+            sample_current=None,
+            sample_total=None,
             completed_frames=frames,
             error=None,
             finished_at=None,

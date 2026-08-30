@@ -18,6 +18,8 @@ const failedJob: Job = {
   resolution_percentage: null,
   progress: 0,
   current_frame: null,
+  sample_current: null,
+  sample_total: null,
   completed_frames: [],
   error: 'Unable to run Blender',
   log_tail: '',
@@ -37,4 +39,21 @@ test('shows a terminal empty-preview state for a failed job', () => {
   expect(container.querySelector('.render-preview')).toHaveTextContent('Render failed')
   expect(screen.queryByText('First frame is rendering')).not.toBeInTheDocument()
   expect(container.querySelector('.render-preview--active')).toBeNull()
+})
+
+test('shows sample telemetry for an active frame', () => {
+  const runningJob: Job = {
+    ...failedJob,
+    status: 'running',
+    current_frame: 4,
+    frame_end: 4,
+    sample_current: 32,
+    sample_total: 128,
+    error: null,
+    finished_at: null,
+  }
+
+  render(<RenderWorkspace job={runningJob} onCancel={vi.fn()} onRetry={vi.fn()} onDelete={vi.fn()} />)
+
+  expect(screen.getByText('Rendering frame 4 of 4 · Sample 32 of 128')).toBeInTheDocument()
 })
