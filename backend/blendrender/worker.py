@@ -1,21 +1,19 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
-import shutil
 import signal
 import time
+import uuid
 from contextlib import suppress
-from dataclasses import dataclass
-from pathlib import Path, PureWindowsPath
+from pathlib import Path
 
 from PIL import Image, UnidentifiedImageError
 
 from .config import Settings
-from .db import Database
-from .models import TERMINAL_STATUSES, Job, JobStatus, utc_now
+from .models import TERMINAL_STATUSES, FrameResult, Job, JobStatus, RenderConfig, utc_now
 from .progress import estimate_remaining_seconds, overall_progress, parse_renderer_line
+from .workspace import WorkspaceStore
 
 LOG_TAIL_LIMIT = 12_000
 ELAPSED_UPDATE_INTERVAL_SECONDS = 1.0
@@ -29,56 +27,6 @@ def preview_filename(frame: int) -> str:
     return f"frame_{frame:06d}.webp"
 
 
-def job_paths(settings: Settings, job_id: str) -> dict[str, Path]:
-    root = settings.jobs_root / job_id
-    return {
-        "root": root,
-        "input": root / "input.blend",
-        "upload": root / "upload.zip",
-        "source": root / "source",
-        "entrypoint": root / "source-entrypoint.json",
-        "outputs": root / "outputs",
-        "previews": root / "previews",
-        "log": root / "render.log",
-        "config": root / "render-config.json",
-    }
-
-
-@dataclass(frozen=True, slots=True)
-class ProjectInput:
-    scene_path: Path
-    resource_root: Path
-
-
-def resolve_job_input(settings: Settings, job_id: str) -> ProjectInput:
-    """Return the direct upload or the validated scene selected from a project ZIP."""
-    paths = job_paths(settings, job_id)
-    if paths["input"].is_file():
-        return ProjectInput(paths["input"].resolve(), paths["root"].resolve())
-
-    source_root = paths["source"].resolve()
-    try:
-        payload = json.loads(paths["entrypoint"].read_text(encoding="utf-8"))
-        relative = Path(payload["scene"])
-    except (KeyError, OSError, TypeError, json.JSONDecodeError) as exc:
-        raise ValueError("Project ZIP is missing a valid scene entrypoint") from exc
-    if (
-        relative.is_absolute()
-        or PureWindowsPath(str(relative)).drive
-        or "\\" in str(relative)
-        or any(part in {".", ".."} for part in relative.parts)
-    ):
-        raise ValueError("Project ZIP contains an unsafe scene entrypoint")
-    scene_path = (source_root / relative).resolve()
-    if (
-        not scene_path.is_relative_to(source_root)
-        or scene_path.suffix.lower() != ".blend"
-        or not scene_path.is_file()
-    ):
-        raise ValueError("Project ZIP scene entrypoint is unavailable")
-    return ProjectInput(scene_path, source_root)
-
-
 def verify_png(path: Path) -> bool:
     if not path.is_file() or path.stat().st_size == 0:
         return False
@@ -87,15 +35,6 @@ def verify_png(path: Path) -> bool:
             return image.format == "PNG" and image.width > 0 and image.height > 0
     except (OSError, UnidentifiedImageError):
         return False
-
-
-def completed_output_frames(settings: Settings, job: Job) -> list[int]:
-    outputs = job_paths(settings, job.id)["outputs"]
-    return [
-        frame
-        for frame in range(job.frame_start, job.frame_end + 1)
-        if verify_png(outputs / frame_filename(frame))
-    ]
 
 
 def create_preview(source: Path, destination: Path) -> None:
@@ -110,9 +49,9 @@ def create_preview(source: Path, destination: Path) -> None:
 
 
 class RenderWorker:
-    def __init__(self, settings: Settings, database: Database):
+    def __init__(self, settings: Settings, store: WorkspaceStore):
         self.settings = settings
-        self.database = database
+        self.store = store
         self._wake = asyncio.Event()
         self._stopping = asyncio.Event()
         self._task: asyncio.Task[None] | None = None
@@ -120,6 +59,7 @@ class RenderWorker:
         self._current_job_id: str | None = None
 
     async def start(self) -> None:
+        await asyncio.to_thread(self.store.recover_owner_jobs, self.settings.pod_id)
         self._task = asyncio.create_task(self._loop(), name="blendrender-render-worker")
         self._wake.set()
 
@@ -136,21 +76,22 @@ class RenderWorker:
 
     async def cancel(self, job: Job) -> Job:
         if job.status == JobStatus.QUEUED:
-            return await self.database.update(
+            return await asyncio.to_thread(
+                self.store.update_job,
                 job.id,
                 status=JobStatus.CANCELED,
                 finished_at=utc_now(),
                 cancel_requested=True,
                 error=None,
             )
-        updated = await self.database.update(job.id, cancel_requested=True)
+        updated = await asyncio.to_thread(self.store.update_job, job.id, cancel_requested=True)
         if self._current_job_id == job.id:
             asyncio.create_task(self._terminate_current())
         return updated
 
     async def _loop(self) -> None:
         while not self._stopping.is_set():
-            job = await self.database.next_queued_job()
+            job = await asyncio.to_thread(self.store.next_queued_job, self.settings.pod_id)
             if job is None:
                 self._wake.clear()
                 with suppress(TimeoutError):
@@ -159,21 +100,28 @@ class RenderWorker:
             await self._run(job)
 
     async def _run(self, job: Job) -> None:
-        paths = job_paths(self.settings, job.id)
-        paths["outputs"].mkdir(parents=True, exist_ok=True)
-        paths["previews"].mkdir(parents=True, exist_ok=True)
-        completed = completed_output_frames(self.settings, job)
+        paths = self.store.job_paths(job.id)
+        output_dir = paths["pending"] / "outputs"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        existing = await asyncio.to_thread(self.store.results_for_job, job.id)
+        completed = sorted({result.frame for result in existing})
+        completed_set = set(completed)
         remaining = [
             frame
             for frame in range(job.frame_start, job.frame_end + 1)
-            if frame not in set(completed)
+            if frame not in completed_set
         ]
         started = time.monotonic()
-        frame_durations: list[float] = []
-        log_tail = ""
+        frame_durations: list[float] = [result.render_seconds for result in existing]
+        log_tail = job.log_tail
         current_frame: int | None = None
+        hardware: list[str] = []
+        effective_samples = job.samples or 1
         last_progress_update = 0.0
         elapsed_task: asyncio.Task[None] | None = None
+
+        async def write_status(**values: object) -> Job:
+            return await asyncio.to_thread(self.store.update_job, job.id, **values)
 
         async def update_sample_progress(
             sample_current: int | None,
@@ -186,8 +134,7 @@ class RenderWorker:
                 return
             last_progress_update = now
             average = sum(frame_durations) / len(frame_durations) if frame_durations else None
-            await self.database.update(
-                job.id,
+            await write_status(
                 current_frame=current_frame,
                 sample_current=sample_current,
                 sample_total=sample_total,
@@ -211,24 +158,27 @@ class RenderWorker:
             )
 
         try:
-            project_input = resolve_job_input(self.settings, job.id)
-            config: dict[str, object] = {
+            scene_path, project_root = await asyncio.to_thread(
+                self.store.scene_entrypoint, job.scene_id
+            )
+            values: dict[str, object] = {
                 "backend": job.backend.value,
                 "frames": remaining,
-                "output_dir": str(paths["outputs"]),
-                "project_root": str(project_input.resource_root),
+                "output_dir": str(output_dir),
+                "project_root": str(project_root),
             }
             for field in ("samples", "resolution_x", "resolution_y", "resolution_percentage"):
                 if (value := getattr(job, field)) is not None:
-                    config[field] = value
-            paths["config"].write_text(json.dumps(config), encoding="utf-8")
+                    values[field] = value
+            config = RenderConfig.model_validate(values)
+            await asyncio.to_thread(self.store.write_render_config, job.id, config)
             command = [
                 str(self.settings.blender_bin),
                 "--background",
                 "--disable-autoexec",
                 "--python-exit-code",
                 "1",
-                str(project_input.scene_path),
+                str(scene_path),
                 "--python",
                 str(self.settings.renderer_script),
                 "--",
@@ -242,10 +192,7 @@ class RenderWorker:
                 start_new_session=True,
             )
             assert self._process.stdout is not None
-            elapsed_task = asyncio.create_task(
-                self._record_elapsed(job.id, started),
-                name=f"blendrender-elapsed-{job.id}",
-            )
+            elapsed_task = asyncio.create_task(self._record_elapsed(job.id, started))
             with paths["log"].open("a", encoding="utf-8") as log_file:
                 async for raw_line in self._process.stdout:
                     line = raw_line.decode(errors="replace")
@@ -255,10 +202,23 @@ class RenderWorker:
                     parsed = parse_renderer_line(line)
                     if parsed.event:
                         event_type = parsed.event.get("type")
-                        if event_type == "frame_started":
+                        if event_type == "job_started":
+                            devices = parsed.event.get("devices")
+                            hardware = (
+                                [str(item) for item in devices]
+                                if isinstance(devices, list)
+                                else []
+                            )
+                            samples = parsed.event.get("samples")
+                            if (
+                                isinstance(samples, int)
+                                and not isinstance(samples, bool)
+                                and samples > 0
+                            ):
+                                effective_samples = samples
+                        elif event_type == "frame_started":
                             current_frame = int(parsed.event["frame"])
-                            await self.database.update(
-                                job.id,
+                            await write_status(
                                 current_frame=current_frame,
                                 sample_current=None,
                                 sample_total=None,
@@ -267,26 +227,44 @@ class RenderWorker:
                         elif event_type == "frame_completed":
                             frame = int(parsed.event["frame"])
                             duration = float(parsed.event.get("seconds", 0))
-                            if duration > 0:
-                                frame_durations.append(duration)
-                            if frame not in completed:
-                                completed.append(frame)
-                                completed.sort()
-                            output_path = paths["outputs"] / frame_filename(frame)
-                            if verify_png(output_path):
+                            source = output_dir / frame_filename(frame)
+                            if duration >= 0 and verify_png(source):
+                                result_id = str(uuid.uuid4())
+                                result_pending = paths["pending"] / result_id
+                                result_pending.mkdir()
+                                os.replace(source, result_pending / "frame.png")
                                 await asyncio.to_thread(
                                     create_preview,
-                                    output_path,
-                                    paths["previews"] / preview_filename(frame),
+                                    result_pending / "frame.png",
+                                    result_pending / "preview.webp",
                                 )
+                                result = FrameResult(
+                                    id=result_id,
+                                    scene_id=job.scene_id,
+                                    job_id=job.id,
+                                    frame=frame,
+                                    pod_id=self.settings.pod_id,
+                                    backend=job.backend,
+                                    hardware=hardware
+                                    or ["CPU" if job.backend.value == "CPU" else "Unknown GPU"],
+                                    samples=effective_samples,
+                                    render_seconds=duration,
+                                    completed_at=str(parsed.event.get("completed_at") or utc_now()),
+                                )
+                                await asyncio.to_thread(
+                                    self.store.publish_result, result, result_pending
+                                )
+                                if frame not in completed:
+                                    completed.append(frame)
+                                    completed.sort()
+                                frame_durations.append(duration)
                             average = (
                                 sum(frame_durations) / len(frame_durations)
                                 if frame_durations
                                 else None
                             )
                             eta = average * (job.total_frames - len(completed)) if average else None
-                            await self.database.update(
-                                job.id,
+                            await write_status(
                                 progress=len(completed) / job.total_frames * 100,
                                 sample_current=None,
                                 sample_total=None,
@@ -298,46 +276,36 @@ class RenderWorker:
                         elif event_type == "frame_progress":
                             current_frame = int(parsed.event["frame"])
                             sample_current, sample_total = _event_sample_progress(parsed.event)
-                            reported_remaining = parsed.event.get("remaining_seconds")
-                            frame_remaining_seconds = (
-                                float(reported_remaining)
-                                if isinstance(reported_remaining, int | float)
-                                else None
-                            )
+                            remaining_seconds = parsed.event.get("remaining_seconds")
                             await update_sample_progress(
                                 sample_current,
                                 sample_total,
-                                frame_remaining_seconds,
+                                float(remaining_seconds)
+                                if isinstance(remaining_seconds, int | float)
+                                else None,
                             )
                         elif event_type == "error":
-                            await self.database.update(
-                                job.id,
+                            await write_status(
                                 error=str(parsed.event.get("message", "Blender render failed")),
                                 log_tail=log_tail,
                             )
                     elif parsed.sample_current is not None:
                         await update_sample_progress(
-                            parsed.sample_current,
-                            parsed.sample_total or 1,
+                            parsed.sample_current, parsed.sample_total or 1
                         )
             return_code = await self._process.wait()
-            latest = await self.database.get_job(job.id)
-            if latest is None:
-                return
+            latest = await asyncio.to_thread(self.store.get_job, job.id)
             if latest.cancel_requested:
-                final_status = JobStatus.CANCELED
-                error = None
+                final_status, error = JobStatus.CANCELED, None
             elif self._stopping.is_set():
                 final_status = JobStatus.INTERRUPTED
                 error = "The application stopped while this render was running."
             elif return_code == 0 and len(completed) == job.total_frames:
-                final_status = JobStatus.COMPLETED
-                error = None
+                final_status, error = JobStatus.COMPLETED, None
             else:
                 final_status = JobStatus.FAILED
                 error = latest.error or _summarize_failure(log_tail, return_code)
-            await self.database.update(
-                job.id,
+            await write_status(
                 status=final_status,
                 progress=100 if final_status == JobStatus.COMPLETED else latest.progress,
                 current_frame=None,
@@ -351,10 +319,9 @@ class RenderWorker:
                 log_tail=log_tail,
             )
         except Exception as exc:
-            latest = await self.database.get_job(job.id)
-            if latest is not None and latest.status not in TERMINAL_STATUSES:
-                await self.database.update(
-                    job.id,
+            latest = await asyncio.to_thread(self.store.get_job, job.id)
+            if latest.status not in TERMINAL_STATUSES:
+                await write_status(
                     status=JobStatus.FAILED,
                     error=f"Unable to run Blender: {exc}",
                     finished_at=utc_now(),
@@ -374,7 +341,8 @@ class RenderWorker:
     async def _record_elapsed(self, job_id: str, started: float) -> None:
         while True:
             await asyncio.sleep(ELAPSED_UPDATE_INTERVAL_SECONDS)
-            await self.database.update(
+            await asyncio.to_thread(
+                self.store.update_job,
                 job_id,
                 elapsed_seconds=time.monotonic() - started,
             )
@@ -395,27 +363,20 @@ class RenderWorker:
             await process.wait()
 
 
-def delete_job_files(settings: Settings, job_id: str) -> None:
-    root = job_paths(settings, job_id)["root"]
-    if root.parent != settings.jobs_root or not root.name == job_id:
-        raise ValueError("Unsafe job path")
-    shutil.rmtree(root, ignore_errors=True)
-
-
 def _event_sample_progress(event: dict[str, object]) -> tuple[int | None, int | None]:
-    sample_current = event.get("sample_current")
-    sample_total = event.get("sample_total")
+    current = event.get("sample_current")
+    total = event.get("sample_total")
     if (
-        not isinstance(sample_current, int)
-        or isinstance(sample_current, bool)
-        or not isinstance(sample_total, int)
-        or isinstance(sample_total, bool)
-        or sample_current < 0
-        or sample_total <= 0
-        or sample_current > sample_total
+        not isinstance(current, int)
+        or isinstance(current, bool)
+        or not isinstance(total, int)
+        or isinstance(total, bool)
+        or current < 0
+        or total <= 0
+        or current > total
     ):
         return None, None
-    return sample_current, sample_total
+    return current, total
 
 
 def _summarize_failure(log_tail: str, return_code: int) -> str:

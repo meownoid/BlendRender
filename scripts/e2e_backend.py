@@ -8,7 +8,6 @@ import struct
 import time
 import urllib.error
 import urllib.request
-import uuid
 import zipfile
 from io import BytesIO
 from pathlib import Path
@@ -64,27 +63,9 @@ class Client:
         return json.loads(raw) if raw else {}
 
 
-def multipart_job(filename: str, content: bytes) -> tuple[bytes, str]:
-    boundary = f"blendrender-e2e-{uuid.uuid4().hex}"
+def multipart_scene(filename: str, content: bytes) -> tuple[bytes, str]:
+    boundary = "blendrender-e2e-upload-boundary"
     parts: list[bytes] = []
-
-    def field(name: str, value: str) -> None:
-        parts.extend(
-            [
-                f"--{boundary}\r\n".encode(),
-                f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode(),
-                value.encode(),
-                b"\r\n",
-            ]
-        )
-
-    field("mode", "still")
-    field("backend", "CPU")
-    field("frame", "1")
-    field("samples", "1")
-    field("resolution_x", "320")
-    field("resolution_y", "180")
-    field("resolution_percentage", "5")
     parts.extend(
         [
             f"--{boundary}\r\n".encode(),
@@ -126,19 +107,35 @@ def main() -> None:
     system = client.json("GET", "/api/system")
     assert "CPU" in system["available_backends"]
 
-    upload, content_type = multipart_job("project.zip", project_zip(args.blend))
+    upload, content_type = multipart_scene("project.zip", project_zip(args.blend))
     raw, _ = client.request(
-        "POST", "/api/jobs", body=upload, content_type=content_type, expected=201
+        "POST", "/api/scenes", body=upload, content_type=content_type, expected=201
     )
-    job = json.loads(raw)
+    scene = json.loads(raw)
+    scene_id = scene["id"]
+    job = client.json(
+        "POST",
+        "/api/jobs",
+        {
+            "scene_id": scene_id,
+            "mode": "still",
+            "backend": "CPU",
+            "frame": 1,
+            "samples": 1,
+            "resolution_x": 320,
+            "resolution_y": 180,
+            "resolution_percentage": 5,
+        },
+        expected=201,
+    )
     assert job["backend"] == "CPU"
     assert job["samples"] == 1
     assert job["resolution_x"] == 320
     assert job["resolution_y"] == 180
     assert job["resolution_percentage"] == 5
-    assert job["filename"] == args.blend.name
+    assert job["scene_id"] == scene_id
     job_id = job["id"]
-    print(f"queued {job_id} from project.zip", flush=True)
+    print(f"queued {job_id} from scene {scene_id}", flush=True)
 
     deadline = time.monotonic() + args.timeout
     last_status = None
@@ -157,21 +154,33 @@ def main() -> None:
     else:
         raise RuntimeError(f"render did not complete within {args.timeout:.0f}s")
 
-    png, _ = client.request("GET", f"/api/jobs/{job_id}/frames/1", content_type=None)
+    frames = client.json("GET", f"/api/scenes/{scene_id}/frames")
+    result = frames["items"][0]["results"][0]
+    result_id = result["id"]
+    png, _ = client.request(
+        "GET", f"/api/scenes/{scene_id}/results/{result_id}/image", content_type=None
+    )
     assert png.startswith(b"\x89PNG\r\n\x1a\n")
     assert struct.unpack(">II", png[16:24]) == (16, 9)
     preview, _ = client.request(
-        "GET", f"/api/jobs/{job_id}/frames/1?preview=true", content_type=None
+        "GET",
+        f"/api/scenes/{scene_id}/results/{result_id}/image?preview=true",
+        content_type=None,
     )
     assert preview[:4] == b"RIFF" and preview[8:12] == b"WEBP"
     archive, _ = client.request(
         "POST",
-        f"/api/jobs/{job_id}/archive",
-        body=json.dumps({"frames": [1]}).encode(),
+        f"/api/scenes/{scene_id}/archive",
+        body=json.dumps({"result_ids": [result_id]}).encode(),
     )
     with zipfile.ZipFile(BytesIO(archive)) as bundle:
-        assert bundle.namelist() == ["frame_000001.png"]
-        assert bundle.read("frame_000001.png").startswith(b"\x89PNG")
+        names = bundle.namelist()
+        assert len(names) == 2
+        assert next(name for name in names if name.endswith(".png"))
+        assert next(name for name in names if name.endswith(".json"))
+        assert bundle.read(next(name for name in names if name.endswith(".png"))).startswith(
+            b"\x89PNG"
+        )
 
     client.request("DELETE", f"/api/jobs/{job_id}", expected=204)
     client.request("GET", f"/api/jobs/{job_id}", expected=404)

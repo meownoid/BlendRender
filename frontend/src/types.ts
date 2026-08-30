@@ -1,9 +1,23 @@
 export type Backend = 'OPTIX' | 'CUDA' | 'CPU'
 export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'canceled' | 'interrupted'
 
-export interface Job {
+export interface Scene {
   id: string
   filename: string
+  source_kind: 'blend' | 'zip'
+  entrypoint: string
+  created_at: string
+  size_bytes: number
+  job_count: number
+  result_count: number
+}
+
+export interface Job {
+  id: string
+  scene_id: string
+  filename: string
+  owner_pod_id: string
+  owner_online: boolean
   status: JobStatus
   mode: 'still' | 'range'
   frame_start: number
@@ -28,6 +42,29 @@ export interface Job {
   cancel_requested: boolean
 }
 
+export interface FrameResult {
+  id: string
+  scene_id: string
+  job_id: string
+  frame: number
+  pod_id: string
+  backend: Backend
+  hardware: string[]
+  samples: number
+  render_seconds: number
+  completed_at: string
+}
+
+export interface FrameGroup {
+  frame: number
+  results: FrameResult[]
+}
+
+export interface FramesPage {
+  items: FrameGroup[]
+  next_cursor: number | null
+}
+
 export interface GPUInfo {
   name: string
   utilization: number
@@ -36,6 +73,7 @@ export interface GPUInfo {
 }
 
 export interface SystemInfo {
+  pod_id: string
   blender_version: string | null
   gpus: GPUInfo[]
   available_backends: Backend[]
@@ -56,8 +94,8 @@ export interface TelemetrySample {
   vram_total_mb: number | null
 }
 
-export interface RenderForm {
-  file: File
+export interface CreateJobForm {
+  scene_id: string
   mode: 'still' | 'range'
   frame: number
   start: number

@@ -29,7 +29,7 @@ just dev-frontend
 The backend listens on `http://localhost:8000`; Vite listens on
 `http://localhost:5173` and proxies API requests according to `frontend/vite.config.ts`. The Just
 recipe supplies a development password of `blendrender-dev`, disables secure cookies for local
-HTTP, uses `./data`, invokes `blender` from your `PATH`, and exposes CPU availability. Set
+HTTP, uses `./workspace`, invokes `blender` from your `PATH`, and exposes CPU availability. Set
 `BLENDER_BIN` when Blender is installed somewhere else.
 
 ## Project map
@@ -38,7 +38,7 @@ HTTP, uses `./data`, invokes `blender` from your `PATH`, and exposes CPU availab
 backend/blendrender/       FastAPI service, queue, worker, auth, and system probing
 frontend/src/              React application and CSS
 renderer/                  Python executed inside Blender
-tests/                     Python unit, API, database, and Blender smoke tests
+tests/                     Python unit, API, workspace-store, and Blender smoke tests
 scripts/                   Container E2E driver and Colima orchestration
 docs/                      Topic documentation
 Dockerfile                 Production multi-stage image
@@ -78,9 +78,9 @@ Markdown links should still be checked.
 
 ## Test layers and limits
 
-- API and database tests use temporary directories and do not require Blender.
-- Progress and database tests exercise event parsing, queue ordering, restart recovery, and schema
-  migration.
+- API and workspace-store tests use temporary directories and do not require Blender.
+- Progress and workspace-store tests exercise event parsing, pod ownership, restart recovery, and
+  atomic result publication.
 - Frontend tests use Vitest, Testing Library, and jsdom.
 - `tests/test_blender_smoke.py` requires a compatible Blender binary and verifies scene settings
   and rendered output. It skips when Blender is unavailable.

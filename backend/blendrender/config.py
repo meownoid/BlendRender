@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import re
+import socket
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -15,7 +17,8 @@ def _bool_env(name: str, default: bool) -> bool:
 @dataclass(frozen=True, slots=True)
 class Settings:
     app_password: str
-    data_root: Path
+    workspace_root: Path
+    pod_id: str
     blender_bin: Path
     renderer_script: Path
     frontend_dist: Path
@@ -39,7 +42,10 @@ class Settings:
         )
         return cls(
             app_password=password,
-            data_root=Path(os.getenv("DATA_ROOT", "/var/lib/blendrender")).resolve(),
+            workspace_root=Path(
+                os.getenv("WORKSPACE_ROOT", "/workspace/blendrender")
+            ).resolve(),
+            pod_id=_pod_id(),
             blender_bin=Path(os.getenv("BLENDER_BIN", "/opt/blender/blender")),
             renderer_script=Path(
                 os.getenv("RENDERER_SCRIPT", str(project_root / "renderer/blendrender_render.py"))
@@ -55,9 +61,23 @@ class Settings:
         )
 
     @property
-    def database_path(self) -> Path:
-        return self.data_root / "blendrender.sqlite3"
+    def scenes_root(self) -> Path:
+        return self.workspace_root / "scenes"
 
     @property
     def jobs_root(self) -> Path:
-        return self.data_root / "jobs"
+        return self.workspace_root / "jobs"
+
+    @property
+    def nodes_root(self) -> Path:
+        return self.workspace_root / "nodes"
+
+
+def _pod_id() -> str:
+    configured = os.getenv("BLENDRENDER_POD_ID") or os.getenv("RUNPOD_POD_ID")
+    value = (configured or re.sub(r"[^A-Za-z0-9_-]", "-", socket.gethostname())).strip()
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}", value):
+        raise RuntimeError(
+            "BLENDRENDER_POD_ID must contain only letters, digits, underscores, or hyphens"
+        )
+    return value

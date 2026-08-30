@@ -9,7 +9,7 @@
 - Make linked library data local. Project ZIPs intentionally allow only one `.blend`, so separate
   library files are rejected.
 - Configure an active camera in the active scene.
-- Verify the scene at the requested frame or frame range before upload.
+- Uploading creates an immutable scene; choose a frame or range only when creating a later job.
 
 The renderer explicitly detects missing, absolute, and out-of-project unpacked file-backed images,
 libraries, and sounds. Other external dependencies, add-ons, fonts, caches, simulations, or system
@@ -39,13 +39,14 @@ Python is not auto-executed.
 
 ## Cancellation, retries, and outputs
 
-Canceling a running job terminates the complete Blender process group. Frames already written as
-valid PNG files are retained. Retry verifies each expected PNG with Pillow and renders only missing
-or invalid frames; it does not guarantee that retained frames came from identical scene settings if
-the on-disk job directory has been altered outside the application.
+Canceling a running job terminates the complete Blender process group. A verified result is published
+under its scene with a unique result ID, its producing job and Pod, selected backend/device names,
+effective samples, and render duration. Retry reuses published results belonging to that same job
+and renders only missing frames. Different jobs may publish separate variants for the same frame.
 
-Output names are deterministic (`frame_000001.png`). Preview images are WebP thumbnails no larger
-than 720×480. ZIP downloads use no compression because PNG files are already compressed.
+Each result package contains `frame.png`, `preview.webp`, and `metadata.json`. Preview images are
+WebP thumbnails no larger than 720×480. ZIP downloads include PNGs and metadata without PNG
+recompression.
 
 For exact request limits and lifecycle operations, see the [API reference](api.md). For the trusted
 operator model and web controls, see [Security](security.md).

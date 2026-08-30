@@ -1,103 +1,78 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Activity, FileUp, ListTodo, LogOut, Plus } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api'
 import { deserializeResourceHistory, type ResourceSample } from '../lib/resourceHistory'
-import type { Job, RenderForm, SystemInfo, UploadProgress } from '../types'
-import { AppHeader } from './AppHeader'
-import { JobRail } from './JobRail'
-import { NewRenderPanel } from './NewRenderPanel'
-import { RenderWorkspace } from './RenderWorkspace'
+import type { CreateJobForm, FrameGroup, Job, Scene, SystemInfo, UploadProgress } from '../types'
+import { Brand } from './Brand'
+import { JobsView } from './JobsView'
+import { NewJobPanel } from './NewJobPanel'
+import { SceneRail } from './SceneRail'
+import { SceneWorkspace } from './SceneWorkspace'
 import { SystemPanel } from './SystemPanel'
+import { UploadScenePanel } from './UploadScenePanel'
 
-type Filter = 'all' | 'active' | 'completed'
-type SidePanel = 'new-render' | 'system' | null
+type View = 'scenes' | 'jobs'
+type Panel = 'upload' | 'job' | null
 
-interface DashboardProps {
-  onLogout: () => Promise<void>
-}
+interface DashboardProps { onLogout: () => Promise<void> }
 
 export function Dashboard({ onLogout }: DashboardProps) {
+  const [view, setView] = useState<View>('scenes')
+  const [panel, setPanel] = useState<Panel>(null)
+  const [scenes, setScenes] = useState<Scene[]>([])
   const [jobs, setJobs] = useState<Job[]>([])
+  const [frames, setFrames] = useState<FrameGroup[]>([])
+  const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null)
   const [system, setSystem] = useState<SystemInfo | null>(null)
   const [resourceHistory, setResourceHistory] = useState<ResourceSample[]>([])
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [filter, setFilter] = useState<Filter>('all')
-  const [sidePanel, setSidePanel] = useState<SidePanel>('new-render')
-  const [queueing, setQueueing] = useState(false)
+  const [busy, setBusy] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null)
+  const [systemPanelOpen, setSystemPanelOpen] = useState(false)
   const [error, setError] = useState('')
+
+  const selectedScene = scenes.find((scene) => scene.id === selectedSceneId) ?? null
+  const selectedJobs = useMemo(() => jobs.filter((job) => job.scene_id === selectedSceneId), [jobs, selectedSceneId])
+  const hasActive = jobs.some((job) => job.status === 'queued' || job.status === 'running')
 
   const refresh = useCallback(async () => {
     try {
-      const [nextJobs, nextSystem, nextTelemetry] = await Promise.all([
-        api.jobs(),
-        api.system(),
-        api.telemetry(),
-      ])
-      setJobs(nextJobs)
-      setSystem(nextSystem)
-      setResourceHistory(deserializeResourceHistory(nextTelemetry))
-      setSelectedId((current) => current && nextJobs.some((job) => job.id === current) ? current : nextJobs[0]?.id ?? null)
+      const [nextScenes, nextJobs, nextSystem, nextTelemetry] = await Promise.all([api.scenes(), api.jobs(), api.system(), api.telemetry()])
+      setScenes(nextScenes); setJobs(nextJobs); setSystem(nextSystem); setResourceHistory(deserializeResourceHistory(nextTelemetry))
+      setSelectedSceneId((current) => current && nextScenes.some((scene) => scene.id === current) ? current : nextScenes[0]?.id ?? null)
       setError('')
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to refresh render node')
-    }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to refresh workspace') }
   }, [])
 
-  const hasActiveJobs = jobs.some((job) => job.status === 'running' || job.status === 'queued')
-
+  useEffect(() => { void refresh() }, [refresh])
   useEffect(() => {
-    let canceled = false
-    let timer: number | undefined
-    async function poll() {
-      await refresh()
-      if (!canceled) {
-        timer = window.setTimeout(poll, hasActiveJobs ? 1500 : 8000)
-      }
-    }
-    void poll()
-    return () => {
-      canceled = true
-      if (timer) window.clearTimeout(timer)
-    }
-  }, [hasActiveJobs, refresh])
+    const timer = window.setInterval(() => void refresh(), hasActive ? 1800 : 8000)
+    return () => window.clearInterval(timer)
+  }, [hasActive, refresh])
+  useEffect(() => {
+    if (!selectedSceneId) { setFrames([]); return }
+    api.frames(selectedSceneId).then((page) => setFrames(page.items)).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load scene results'))
+  }, [selectedSceneId, jobs])
 
-  const selectedJob = jobs.find((job) => job.id === selectedId) ?? null
-  const latestSample = resourceHistory.length ? resourceHistory[resourceHistory.length - 1] : null
-
-  async function createJob(form: RenderForm) {
-    setQueueing(true)
-    setUploadProgress({ loaded: 0, total: null })
-    try {
-      const job = await api.createJob(form, setUploadProgress)
-      setJobs((current) => [job, ...current])
-      setSelectedId(job.id)
-    } finally {
-      setQueueing(false)
-      setUploadProgress(null)
-    }
+  async function uploadScene(file: File) {
+    setBusy(true); setUploadProgress({ loaded: 0, total: file.size })
+    try { const scene = await api.uploadScene(file, setUploadProgress); await refresh(); setSelectedSceneId(scene.id); setPanel('job') } finally { setBusy(false); setUploadProgress(null) }
   }
+  async function createJob(form: CreateJobForm) { setBusy(true); try { await api.createJob(form); await refresh(); setPanel(null) } finally { setBusy(false) } }
+  async function deleteScene(scene: Scene) { if (!window.confirm(`Delete ${scene.filename}, all results, and terminal jobs?`)) return; await api.deleteScene(scene.id); await refresh() }
+  async function updateJob(job: Job, action: (id: string) => Promise<Job>) { await action(job.id); await refresh() }
+  async function deleteJob(job: Job) { if (!window.confirm(`Delete job ${job.id.slice(0, 8)}? Published scene results remain.`)) return; await api.deleteJob(job.id); await refresh() }
+  const latest = resourceHistory.at(-1)
 
-  async function applyJobAction(job: Job, action: (id: string) => Promise<Job>) {
-    const updated = await action(job.id)
-    setJobs((current) => current.map((item) => item.id === updated.id ? updated : item))
-  }
+  return <div className="shared-app">
+    <header className="shared-header"><Brand /><nav><button className={view === 'scenes' ? 'is-selected' : ''} onClick={() => setView('scenes')}>Scenes</button><button className={view === 'jobs' ? 'is-selected' : ''} onClick={() => setView('jobs')}>Jobs</button></nav><div className="header-actions"><button className={`system-meter${systemPanelOpen ? ' is-active' : ''}`} onClick={() => { setPanel(null); setSystemPanelOpen((open) => !open) }} aria-controls="system-panel" aria-expanded={systemPanelOpen} aria-label="Open performance panel"><Activity className="system-meter__icon" size={18} /><span className="system-meter__metric"><b>CPU</b><strong>{formatPercent(latest?.cpuUtilization)}</strong></span><span className="system-meter__metric"><b>GPU</b><strong>{formatPercent(latest?.gpuUtilization)}</strong></span><span className="system-meter__metric"><b>MEM</b><strong>{formatPercent(latest?.memoryUtilization)}</strong></span><span className="system-meter__metric"><b>POD</b><strong>{system?.pod_id ?? '—'}</strong></span></button><button className="button button--outline" onClick={() => { setSystemPanelOpen(false); setPanel('upload') }}><FileUp size={17} /> Upload scene</button><button className="button button--primary header-new-job" onClick={() => { setSystemPanelOpen(false); setPanel('job') }} disabled={!selectedScene}><Plus size={17} /> New render</button><button className="icon-button" onClick={() => void onLogout()} aria-label="Sign out"><LogOut size={18} /></button></div></header>
+    {error ? <div className="global-error" role="alert">{error}</div> : null}
+    <div className="shared-body">{view === 'scenes' ? <><SceneRail scenes={scenes} selectedId={selectedSceneId} onSelect={setSelectedSceneId} onUpload={() => setPanel('upload')} /><SceneWorkspace scene={selectedScene} frames={frames} jobs={selectedJobs} onDelete={deleteScene} /></> : <><aside className="jobs-sidebar"><ListTodo size={21} /><span>All connected jobs are visible here. Only jobs owned by <strong>{system?.pod_id ?? 'this pod'}</strong> can be changed.</span></aside><JobsView jobs={jobs} scenes={scenes} podId={system?.pod_id ?? null} onCancel={(job) => updateJob(job, api.cancel)} onRetry={(job) => updateJob(job, api.retry)} onDelete={deleteJob} /></>}</div>
+    <UploadScenePanel open={panel === 'upload'} busy={busy} progress={uploadProgress} onClose={() => setPanel(null)} onUpload={uploadScene} />
+    <NewJobPanel open={panel === 'job'} scene={selectedScene} system={system} busy={busy} onClose={() => setPanel(null)} onSubmit={createJob} />
+    <SystemPanel open={systemPanelOpen} system={system} samples={resourceHistory} onClose={() => setSystemPanelOpen(false)} />
+  </div>
+}
 
-  async function deleteJob(job: Job) {
-    if (!window.confirm(`Delete ${job.filename} and all rendered frames?`)) return
-    await api.delete(job.id)
-    setJobs((current) => current.filter((item) => item.id !== job.id))
-  }
-
-  return (
-    <div className={`app-shell${sidePanel ? ' app-shell--panel-open' : ''}`}>
-      <AppHeader system={system} latestSample={latestSample} renderPanelOpen={sidePanel === 'new-render'} systemPanelOpen={sidePanel === 'system'} onOpenPanel={() => setSidePanel('new-render')} onOpenSystem={() => setSidePanel('system')} onLogout={() => void onLogout()} />
-      {error ? <div className="global-error" role="alert">{error}</div> : null}
-      <div className="app-body">
-        <JobRail jobs={jobs} selectedId={selectedId} filter={filter} onFilter={setFilter} onSelect={setSelectedId} />
-        <RenderWorkspace job={selectedJob} onCancel={(job) => applyJobAction(job, api.cancel)} onRetry={(job) => applyJobAction(job, api.retry)} onDelete={deleteJob} />
-        <NewRenderPanel open={sidePanel === 'new-render'} system={system} busy={queueing} uploadProgress={uploadProgress} onClose={() => setSidePanel(null)} onSubmit={createJob} />
-        <SystemPanel open={sidePanel === 'system'} system={system} samples={resourceHistory} onClose={() => setSidePanel(null)} />
-      </div>
-    </div>
-  )
+function formatPercent(value: number | null | undefined): string {
+  return value == null ? '—' : `${Math.round(value)}%`
 }

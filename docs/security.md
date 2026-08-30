@@ -14,8 +14,9 @@ Do not accept untrusted `.blend` files solely because Python auto-execution is d
 files may still exercise Blender parsers, codecs, linked data, render settings, compositor nodes,
 and high resource consumption. Isolate the Pod and avoid attaching unrelated credentials or data.
 
-Job filenames, errors, and logs can contain sensitive project information. `DATA_ROOT` contains the
-uploaded source projects as well as output and should be protected accordingly.
+Scene filenames, errors, logs, source projects, and results can contain sensitive project
+information. The shared `WORKSPACE_ROOT` should be protected accordingly; every attached Pod can
+read its contents.
 
 ## Web controls
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import shutil
 import tempfile
@@ -12,24 +11,28 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Literal
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 
 from .auth import SessionManager
 from .config import Settings
-from .db import Database
 from .models import (
-    TERMINAL_STATUSES,
     ArchiveRequest,
-    Backend,
+    CreateJobRequest,
+    FrameResult,
+    FramesPage,
     Job,
+    JobManifest,
     JobStatus,
     LoginRequest,
+    Scene,
+    SceneManifest,
     SessionResponse,
     SystemInfo,
     TelemetrySample,
+    utc_now,
 )
 from .project_archive import (
     ProjectArchiveCapacityError,
@@ -39,19 +42,13 @@ from .project_archive import (
 )
 from .system import SystemProbe
 from .telemetry import TelemetryCollector
-from .worker import (
-    RenderWorker,
-    completed_output_frames,
-    delete_job_files,
-    frame_filename,
-    job_paths,
-    preview_filename,
-)
+from .worker import RenderWorker
+from .workspace import ConflictError, NotFoundError, WorkspaceError, WorkspaceStore
 
 
 def create_app(settings: Settings | None = None, *, start_worker: bool = True) -> FastAPI:
     resolved = settings or Settings.from_env()
-    database = Database(resolved.database_path)
+    store = WorkspaceStore(resolved)
     sessions = SessionManager(
         resolved.app_password,
         secure=resolved.cookie_secure,
@@ -59,22 +56,22 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
     )
     probe = SystemProbe(
         resolved.blender_bin,
-        resolved.data_root,
+        resolved.workspace_root,
+        resolved.pod_id,
         resolved.available_backends_override,
     )
-    worker = RenderWorker(resolved, database)
-    telemetry = TelemetryCollector(database, probe)
+    worker = RenderWorker(resolved, store)
+    telemetry = TelemetryCollector(store, probe)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        resolved.jobs_root.mkdir(parents=True, exist_ok=True)
-        await database.initialize()
+        await asyncio.to_thread(store.initialize)
         await probe.initialize()
         await telemetry.start()
         if start_worker:
             await worker.start()
         app.state.settings = resolved
-        app.state.database = database
+        app.state.store = store
         app.state.sessions = sessions
         app.state.probe = probe
         app.state.telemetry = telemetry
@@ -86,7 +83,7 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
 
     app = FastAPI(
         title="BlendRender",
-        version="0.1.0",
+        version="2.0.0",
         docs_url=None,
         redoc_url=None,
         lifespan=lifespan,
@@ -116,10 +113,7 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
     async def ready() -> Response:
         if probe.ready:
             return JSONResponse({"status": "ready"})
-        return JSONResponse(
-            {"status": "not_ready", "detail": "Blender or an NVIDIA backend is unavailable"},
-            status_code=503,
-        )
+        return JSONResponse({"status": "not_ready"}, status_code=503)
 
     @app.post("/api/auth/login", response_model=SessionResponse)
     async def login(payload: LoginRequest, response: Response) -> SessionResponse:
@@ -144,158 +138,144 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
 
     @app.get("/api/system/telemetry", response_model=list[TelemetrySample])
     async def system_telemetry(_: None = Depends(require_auth)) -> list[TelemetrySample]:
-        return await database.list_telemetry()
+        return await telemetry.samples()
 
-    @app.post("/api/jobs", response_model=Job, status_code=201)
-    async def create_job(
-        file: Annotated[UploadFile, File()],
-        mode: Annotated[Literal["still", "range"], Form()],
-        backend: Annotated[Backend, Form()],
-        frame: Annotated[int | None, Form()] = None,
-        start: Annotated[int | None, Form()] = None,
-        end: Annotated[int | None, Form()] = None,
-        samples: Annotated[int | None, Form()] = None,
-        resolution_x: Annotated[int | None, Form()] = None,
-        resolution_y: Annotated[int | None, Form()] = None,
-        resolution_percentage: Annotated[int | None, Form()] = None,
-        _: None = Depends(require_auth),
-    ) -> Job:
-        if backend not in probe.available_backends:
-            raise HTTPException(
-                status_code=422,
-                detail=f"{backend.value} is not available on this Pod",
-            )
+    @app.post("/api/scenes", response_model=Scene, status_code=201)
+    async def create_scene(
+        file: Annotated[UploadFile, File()], _: None = Depends(require_auth)
+    ) -> Scene:
         original_name = Path(file.filename or "").name
         suffix = Path(original_name).suffix.lower()
         if suffix not in {".blend", ".zip"}:
             raise HTTPException(
-                status_code=422,
-                detail="Only .blend files and project ZIP archives are accepted",
+                status_code=422, detail="Only .blend files and project ZIP archives are accepted"
             )
-        if mode == "still":
-            if frame is None:
-                raise HTTPException(
-                    status_code=422,
-                    detail="A frame is required for a still render",
-                )
-            frame_start = frame_end = frame
-        else:
-            if start is None or end is None:
-                raise HTTPException(status_code=422, detail="Start and end frames are required")
-            if start > end:
-                raise HTTPException(status_code=422, detail="Start frame must not exceed end frame")
-            frame_start, frame_end = start, end
-        if frame_end - frame_start + 1 > 100_000:
-            raise HTTPException(status_code=422, detail="Frame range is too large")
-        if samples is not None and not 1 <= samples <= 1_000_000:
-            raise HTTPException(status_code=422, detail="Samples must be between 1 and 1000000")
-        if (resolution_x is None) != (resolution_y is None):
-            raise HTTPException(
-                status_code=422,
-                detail="Resolution width and height must be provided together",
-            )
-        if resolution_x is not None and not 4 <= resolution_x <= 65_536:
-            raise HTTPException(status_code=422, detail="Resolution width is out of range")
-        if resolution_y is not None and not 4 <= resolution_y <= 65_536:
-            raise HTTPException(status_code=422, detail="Resolution height is out of range")
-        if resolution_percentage is not None and not 1 <= resolution_percentage <= 100:
-            raise HTTPException(
-                status_code=422,
-                detail="Resolution percentage must be between 1 and 100",
-            )
-
-        usage = shutil.disk_usage(resolved.data_root)
-        if usage.free < 1024**3:
+        if shutil.disk_usage(resolved.workspace_root).free < 1024**3:
             raise HTTPException(status_code=507, detail="Less than 1 GB of disk space remains")
-        job_id = str(uuid.uuid4())
-        paths = job_paths(resolved, job_id)
-        paths["root"].mkdir(parents=True)
+        scene_id = str(uuid.uuid4())
+        staged = store.staging_path(scene_id)
+        staged.mkdir(parents=True)
         size = 0
         try:
-            upload_path = paths["upload"] if suffix == ".zip" else paths["input"]
-            with upload_path.open("wb") as destination:
-                while chunk := await file.read(8 * 1024 * 1024):
-                    size += len(chunk)
-                    if size > resolved.max_upload_bytes:
-                        raise HTTPException(
-                            status_code=413,
-                            detail="Upload exceeds the configured limit",
-                        )
-                    destination.write(chunk)
-            if size == 0:
-                raise HTTPException(status_code=422, detail="The uploaded project file is empty")
-            job_filename = original_name
-            if suffix == ".zip":
-                try:
-                    manifest = await asyncio.to_thread(
-                        inspect_project_archive,
-                        paths["upload"],
-                        paths["source"],
-                        resolved.max_upload_bytes,
-                    )
-                except ProjectArchiveError as exc:
-                    raise HTTPException(status_code=422, detail=str(exc)) from exc
-                if shutil.disk_usage(resolved.data_root).free < manifest.total_size + 1024**3:
+            source = staged / "source"
+            if suffix == ".blend":
+                source.mkdir()
+                destination = source / "input.blend"
+                entrypoint = "input.blend"
+                source_kind: Literal["blend", "zip"] = "blend"
+                with destination.open("xb") as destination_file:
+                    size = await _copy_upload(file, destination_file, resolved.max_upload_bytes)
+            else:
+                upload = staged / "upload.zip"
+                with upload.open("xb") as destination_file:
+                    size = await _copy_upload(file, destination_file, resolved.max_upload_bytes)
+                manifest = await asyncio.to_thread(
+                    inspect_project_archive, upload, source, resolved.max_upload_bytes
+                )
+                if shutil.disk_usage(resolved.workspace_root).free < manifest.total_size + 1024**3:
                     raise HTTPException(
                         status_code=507,
                         detail="Insufficient disk space to extract the uploaded ZIP archive",
                     )
                 try:
                     await asyncio.to_thread(
-                        extract_project_archive,
-                        paths["upload"],
-                        paths["source"],
-                        manifest,
-                        resolved.max_upload_bytes,
+                        extract_project_archive, upload, source, manifest, resolved.max_upload_bytes
                     )
                 except ProjectArchiveCapacityError as exc:
                     raise HTTPException(status_code=507, detail=str(exc)) from exc
-                except ProjectArchiveError as exc:
-                    raise HTTPException(status_code=422, detail=str(exc)) from exc
-                paths["entrypoint"].write_text(
-                    json.dumps({"scene": manifest.scene_relative_path.as_posix()}),
-                    encoding="utf-8",
-                )
-                paths["upload"].unlink()
-                job_filename = manifest.scene_path.name
-            job = await database.create_job(
-                job_id=job_id,
-                filename=job_filename,
-                mode=mode,
-                frame_start=frame_start,
-                frame_end=frame_end,
-                backend=backend,
-                samples=samples,
-                resolution_x=resolution_x,
-                resolution_y=resolution_y,
-                resolution_percentage=resolution_percentage,
+                entrypoint = manifest.scene_relative_path.as_posix()
+                source_kind = "zip"
+                upload.unlink()
+            if size == 0:
+                raise HTTPException(status_code=422, detail="The uploaded project file is empty")
+            scene = SceneManifest(
+                id=scene_id,
+                filename=Path(entrypoint).name,
+                source_kind=source_kind,
+                entrypoint=entrypoint,
+                created_at=utc_now(),
+                size_bytes=size,
             )
+            return await asyncio.to_thread(store.create_scene, scene, staged)
+        except ProjectArchiveError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception:
-            shutil.rmtree(paths["root"], ignore_errors=True)
+            shutil.rmtree(staged, ignore_errors=True)
             raise
         finally:
             await file.close()
+
+    @app.get("/api/scenes", response_model=list[Scene])
+    async def list_scenes(_: None = Depends(require_auth)) -> list[Scene]:
+        return await asyncio.to_thread(store.list_scenes)
+
+    @app.get("/api/scenes/{scene_id}", response_model=Scene)
+    async def get_scene(scene_id: str, _: None = Depends(require_auth)) -> Scene:
+        return await _require_scene(store, scene_id)
+
+    @app.delete("/api/scenes/{scene_id}", status_code=204)
+    async def delete_scene(scene_id: str, _: None = Depends(require_auth)) -> Response:
+        try:
+            await asyncio.to_thread(store.delete_scene, scene_id)
+        except ConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Scene not found") from exc
+        return Response(status_code=204)
+
+    @app.post("/api/jobs", response_model=Job, status_code=201)
+    async def create_job(payload: CreateJobRequest, _: None = Depends(require_auth)) -> Job:
+        if payload.backend not in probe.available_backends:
+            raise HTTPException(
+                status_code=422,
+                detail=f"{payload.backend.value} is not available on this Pod",
+            )
+        try:
+            frame_start, frame_end = payload.validate_render_settings()
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        scene = await _require_scene(store, payload.scene_id)
+        job = JobManifest(
+            id=str(uuid.uuid4()),
+            scene_id=scene.id,
+            filename=scene.filename,
+            owner_pod_id=resolved.pod_id,
+            mode=payload.mode,
+            frame_start=frame_start,
+            frame_end=frame_end,
+            backend=payload.backend,
+            samples=payload.samples,
+            resolution_x=payload.resolution_x,
+            resolution_y=payload.resolution_y,
+            resolution_percentage=payload.resolution_percentage,
+            created_at=utc_now(),
+        )
+        try:
+            created = await asyncio.to_thread(store.create_job, job)
+        except ConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         worker.notify()
         telemetry.notify()
-        return job
+        return created
 
     @app.get("/api/jobs", response_model=list[Job])
     async def list_jobs(
-        status: JobStatus | None = None, _: None = Depends(require_auth)
+        scene_id: str | None = None,
+        status: JobStatus | None = None,
+        _: None = Depends(require_auth),
     ) -> list[Job]:
-        return await database.list_jobs(status)
+        return await asyncio.to_thread(store.list_jobs, scene_id=scene_id, status=status)
 
     @app.get("/api/jobs/{job_id}", response_model=Job)
     async def get_job(job_id: str, _: None = Depends(require_auth)) -> Job:
-        return await _require_job(database, job_id)
+        return await _require_job(store, job_id)
 
     @app.post("/api/jobs/{job_id}/cancel", response_model=Job)
     async def cancel_job(job_id: str, _: None = Depends(require_auth)) -> Job:
-        job = await _require_job(database, job_id)
+        job = await _require_owned_job(store, job_id, resolved.pod_id)
         if job.status not in {JobStatus.QUEUED, JobStatus.RUNNING}:
             raise HTTPException(
-                status_code=409,
-                detail="Only queued or running jobs can be canceled",
+                status_code=409, detail="Only queued or running jobs can be canceled"
             )
         updated = await worker.cancel(job)
         telemetry.notify()
@@ -303,70 +283,111 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
 
     @app.post("/api/jobs/{job_id}/retry", response_model=Job)
     async def retry_job(job_id: str, _: None = Depends(require_auth)) -> Job:
-        job = await _require_job(database, job_id)
-        if job.status not in {
-            JobStatus.FAILED,
-            JobStatus.CANCELED,
-            JobStatus.INTERRUPTED,
-        }:
+        job = await _require_owned_job(store, job_id, resolved.pod_id)
+        if job.status not in {JobStatus.FAILED, JobStatus.CANCELED, JobStatus.INTERRUPTED}:
             raise HTTPException(status_code=409, detail="This job cannot be retried")
-        frames = await asyncio.to_thread(completed_output_frames, resolved, job)
-        updated = await database.requeue(job_id, frames)
+        results = await asyncio.to_thread(store.results_for_job, job.id)
+        completed = sorted({result.frame for result in results})
+        updated = await asyncio.to_thread(
+            store.update_job,
+            job.id,
+            status=JobStatus.QUEUED,
+            progress=len(completed) / job.total_frames * 100,
+            current_frame=None,
+            sample_current=None,
+            sample_total=None,
+            completed_frames=completed,
+            error=None,
+            finished_at=None,
+            eta_seconds=None,
+            cancel_requested=False,
+        )
         worker.notify()
         telemetry.notify()
         return updated
 
     @app.delete("/api/jobs/{job_id}", status_code=204)
     async def delete_job(job_id: str, _: None = Depends(require_auth)) -> Response:
-        job = await _require_job(database, job_id)
-        if job.status not in TERMINAL_STATUSES:
-            raise HTTPException(status_code=409, detail="Cancel the job before deleting it")
-        await database.delete_job(job_id)
-        await asyncio.to_thread(delete_job_files, resolved, job_id)
+        await _require_owned_job(store, job_id, resolved.pod_id)
+        try:
+            await asyncio.to_thread(store.delete_job, job_id)
+        except ConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         return Response(status_code=204)
 
-    @app.get("/api/jobs/{job_id}/frames/{frame}")
-    async def get_frame(
-        job_id: str,
-        frame: int,
+    @app.get("/api/scenes/{scene_id}/frames", response_model=FramesPage)
+    async def list_frames(
+        scene_id: str,
+        cursor: int | None = None,
+        limit: int = 50,
+        _: None = Depends(require_auth),
+    ) -> FramesPage:
+        await _require_scene(store, scene_id)
+        if not 1 <= limit <= 200:
+            raise HTTPException(status_code=422, detail="Limit must be between 1 and 200")
+        return await asyncio.to_thread(store.list_frame_groups, scene_id, cursor, limit)
+
+    @app.get("/api/scenes/{scene_id}/results/{result_id}", response_model=FrameResult)
+    async def get_result(
+        scene_id: str, result_id: str, _: None = Depends(require_auth)
+    ) -> FrameResult:
+        for result in await asyncio.to_thread(store.list_results, scene_id):
+            if result.id == result_id:
+                return result
+        raise HTTPException(status_code=404, detail="Result not found")
+
+    @app.get("/api/scenes/{scene_id}/results/{result_id}/image")
+    async def get_result_image(
+        scene_id: str,
+        result_id: str,
         preview: bool = False,
         _: None = Depends(require_auth),
     ) -> FileResponse:
-        job = await _require_job(database, job_id)
-        if frame < job.frame_start or frame > job.frame_end:
-            raise HTTPException(status_code=404, detail="Frame does not belong to this job")
-        paths = job_paths(resolved, job_id)
-        path = (
-            paths["previews"] / preview_filename(frame)
-            if preview
-            else paths["outputs"] / frame_filename(frame)
-        )
+        result = await get_result(scene_id, result_id)
+        result_paths = store.result_paths(scene_id, result.frame, result.id)
+        path = result_paths["preview" if preview else "image"]
         if not path.is_file():
-            raise HTTPException(status_code=404, detail="Frame is not available")
+            raise HTTPException(status_code=404, detail="Result image is not available")
         return FileResponse(
             path,
             media_type="image/webp" if preview else "image/png",
-            filename=None if preview else frame_filename(frame),
+            filename=None if preview else f"frame_{result.frame:06d}-{result.id[:8]}.png",
             content_disposition_type="inline" if preview else "attachment",
         )
 
-    @app.post("/api/jobs/{job_id}/archive")
-    async def archive(
-        job_id: str, payload: ArchiveRequest, _: None = Depends(require_auth)
+    @app.post("/api/scenes/{scene_id}/archive")
+    async def archive_scene(
+        scene_id: str, payload: ArchiveRequest, _: None = Depends(require_auth)
     ) -> FileResponse:
-        job = await _require_job(database, job_id)
-        available = set(completed_output_frames(resolved, job))
-        requested = sorted(available if payload.frames is None else set(payload.frames))
-        if not requested or not set(requested).issubset(available):
+        scene = await _require_scene(store, scene_id)
+        available = await asyncio.to_thread(store.list_results, scene_id)
+        selected = available if payload.result_ids is None else [
+            result for result in available if result.id in set(payload.result_ids)
+        ]
+        requested_count = len(set(payload.result_ids or []))
+        if not selected or (payload.result_ids is not None and len(selected) != requested_count):
             raise HTTPException(
-                status_code=422,
-                detail="One or more requested frames are unavailable",
+                status_code=422, detail="One or more requested results are unavailable"
             )
-        archive_path = await asyncio.to_thread(_create_archive, resolved, job, requested)
+        archive_path = await asyncio.to_thread(_create_archive, store, selected, scene.filename)
         return FileResponse(
             archive_path,
             media_type="application/zip",
-            filename=f"{Path(job.filename).stem}-frames.zip",
+            filename=f"{Path(scene.filename).stem}-results.zip",
+            background=BackgroundTask(archive_path.unlink, missing_ok=True),
+        )
+
+    @app.post("/api/jobs/{job_id}/archive")
+    async def archive_job(job_id: str, _: None = Depends(require_auth)) -> FileResponse:
+        job = await _require_job(store, job_id)
+        results = await asyncio.to_thread(store.results_for_job, job.id)
+        if not results:
+            raise HTTPException(status_code=422, detail="This job has no completed results")
+        archive_path = await asyncio.to_thread(_create_archive, store, results, job.filename)
+        return FileResponse(
+            archive_path,
+            media_type="application/zip",
+            filename=f"{Path(job.filename).stem}-job-{job.id[:8]}.zip",
             background=BackgroundTask(archive_path.unlink, missing_ok=True),
         )
 
@@ -389,27 +410,48 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
     return app
 
 
-async def _require_job(database: Database, job_id: str) -> Job:
+async def _copy_upload(file: UploadFile, destination, max_bytes: int) -> int:  # type: ignore[no-untyped-def]
+    size = 0
+    while chunk := await file.read(8 * 1024 * 1024):
+        size += len(chunk)
+        if size > max_bytes:
+            raise HTTPException(status_code=413, detail="Upload exceeds the configured limit")
+        destination.write(chunk)
+    return size
+
+
+async def _require_scene(store: WorkspaceStore, scene_id: str) -> Scene:
     try:
-        uuid.UUID(job_id)
-    except ValueError as exc:
+        return await asyncio.to_thread(store.get_scene, scene_id)
+    except (NotFoundError, WorkspaceError) as exc:
+        raise HTTPException(status_code=404, detail="Scene not found") from exc
+
+
+async def _require_job(store: WorkspaceStore, job_id: str) -> Job:
+    try:
+        return await asyncio.to_thread(store.get_job, job_id)
+    except (NotFoundError, WorkspaceError) as exc:
         raise HTTPException(status_code=404, detail="Job not found") from exc
-    job = await database.get_job(job_id)
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+
+
+async def _require_owned_job(store: WorkspaceStore, job_id: str, pod_id: str) -> Job:
+    job = await _require_job(store, job_id)
+    if job.owner_pod_id != pod_id:
+        raise HTTPException(status_code=409, detail="This job is owned by another Pod")
     return job
 
 
-def _create_archive(settings: Settings, job: Job, frames: list[int]) -> Path:
-    handle, name = tempfile.mkstemp(prefix=f"blendrender-{job.id}-", suffix=".zip")
+def _create_archive(store: WorkspaceStore, results: list[FrameResult], filename: str) -> Path:
+    handle, name = tempfile.mkstemp(prefix="blendrender-", suffix=".zip")
     os.close(handle)
     archive = Path(name)
     try:
         with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_STORED) as bundle:
-            outputs = job_paths(settings, job.id)["outputs"]
-            for frame in frames:
-                path = outputs / frame_filename(frame)
-                bundle.write(path, arcname=path.name)
+            for result in results:
+                paths = store.result_paths(result.scene_id, result.frame, result.id)
+                stem = f"frame_{result.frame:06d}-{result.id}"
+                bundle.write(paths["image"], arcname=f"{stem}.png")
+                bundle.write(paths["metadata"], arcname=f"{stem}.json")
         return archive
     except Exception:
         archive.unlink(missing_ok=True)

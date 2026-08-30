@@ -113,7 +113,13 @@ def run() -> None:
         scene.render.resolution_percentage = int(config["resolution_percentage"])
     scene.render.image_settings.file_format = "PNG"
     scene.render.use_file_extension = True
-    emit("job_started", backend=backend, devices=devices, frame_count=len(frames))
+    emit(
+        "job_started",
+        backend=backend,
+        devices=devices,
+        samples=scene.cycles.samples,
+        frame_count=len(frames),
+    )
 
     for frame in frames:
         started = time.monotonic()
@@ -129,7 +135,12 @@ def run() -> None:
             bpy.ops.render.render(write_still=True)
         finally:
             bpy.app.handlers.render_stats.remove(render_stats_handler)
-        emit("frame_completed", frame=frame, seconds=time.monotonic() - started)
+        emit(
+            "frame_completed",
+            frame=frame,
+            seconds=time.monotonic() - started,
+            completed_at=time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime()),
+        )
     if report_path := config.get("diagnostic_report"):
         Path(str(report_path)).write_text(
             json.dumps(

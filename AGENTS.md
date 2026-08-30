@@ -24,8 +24,9 @@ when a user-facing capability, prerequisite, command, endpoint, or operational b
 - Production runs one Uvicorn process with one in-process `RenderWorker`; it renders one Blender
   job at a time. Do not increase worker/replica counts without redesigning queue, cancellation, and
   filesystem coordination.
-- Job state is stored in SQLite; source projects, configs, logs, outputs, and previews are stored
-  under `DATA_ROOT/jobs/{uuid}`.
+- Shared state is stored as versioned, atomically-published JSON and result directories under
+  `WORKSPACE_ROOT` (normally `/workspace/blendrender`). Scenes are immutable, a job has one
+  permanent Pod owner, and only that owner may update its mutable status or log.
 - Retriable jobs reuse only output files that pass PNG verification. Preserve completed frames on
   cancel, interruption, and retry.
 - Blender must continue to launch with background mode, disabled embedded-script auto-execution,
@@ -41,7 +42,7 @@ when a user-facing capability, prerequisite, command, endpoint, or operational b
 | Concern | Primary files |
 | --- | --- |
 | HTTP validation/routes/static serving | `backend/blendrender/main.py`, `models.py` |
-| Queue/state/persistence | `backend/blendrender/db.py`, `worker.py` |
+| Queue/state/persistence | `backend/blendrender/workspace.py`, `worker.py` |
 | Authentication/security headers | `backend/blendrender/auth.py`, `main.py` |
 | GPU and Blender discovery | `backend/blendrender/system.py` |
 | Blender scene/render behavior | `renderer/blendrender_render.py` |

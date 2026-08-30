@@ -9,5 +9,8 @@ services:
     environment:
       APP_PASSWORD: ${APP_PASSWORD:?Set APP_PASSWORD in .env or the shell}
       COOKIE_SECURE: "false"
+      WORKSPACE_ROOT: /workspace/blendrender
+    volumes:
+      - ./workspace:/workspace
     gpus: all
     restart: unless-stopped

@@ -18,13 +18,13 @@ ARG BLENDER_SHA256=a31f524fa99a527d3d52b7f5aaa68c34e1a19d5a1c9473f79c5cc610fd5b1
 ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
-    DATA_ROOT=/var/lib/blendrender \
+    WORKSPACE_ROOT=/workspace/blendrender \
     BLENDER_BIN=/opt/blender/blender \
     RENDERER_SCRIPT=/app/renderer/blendrender_render.py \
     FRONTEND_DIST=/app/frontend/dist
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl xz-utils tini python3 \
+      ca-certificates curl xz-utils tini python3 util-linux \
       libegl1 libgl1 libsm6 libx11-6 libxext6 libxfixes3 libxi6 libxkbcommon0 libxrender1 \
       libxxf86vm1 libwayland-client0 \
     && curl -fsSLo /tmp/blender.tar.xz \
@@ -42,16 +42,16 @@ WORKDIR /app
 COPY --from=python-builder /app/.venv /app/.venv
 COPY backend/ ./backend/
 COPY renderer/ ./renderer/
+COPY scripts/container-entrypoint.sh ./scripts/container-entrypoint.sh
 COPY frontend/dist ./frontend/dist
 
 RUN groupadd --gid 10001 blendrender \
     && useradd --uid 10001 --gid blendrender --no-create-home --shell /usr/sbin/nologin blendrender \
-    && mkdir -p /var/lib/blendrender \
-    && chown -R blendrender:blendrender /var/lib/blendrender /app
+    && chmod 755 /app/scripts/container-entrypoint.sh \
+    && chown -R blendrender:blendrender /app
 
-USER blendrender
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD ["python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
-ENTRYPOINT ["/usr/bin/tini", "--"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/app/scripts/container-entrypoint.sh"]
 CMD ["uvicorn", "blendrender.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "*"]

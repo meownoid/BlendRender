@@ -58,8 +58,8 @@ function ResourcePlot({ label, color, samples, value, detail }: ResourcePlotProp
 export function SystemPanel({ open, system, samples, onClose }: SystemPanelProps) {
   const latest = samples.length ? samples[samples.length - 1] : null
   return (
-    <aside id="system-panel" className={`render-panel system-panel${open ? ' is-open' : ''}`} hidden={!open} aria-hidden={!open} aria-labelledby="system-panel-title">
-      <div className="render-panel__header"><div><h2 id="system-panel-title">System stats</h2><p>Last 15 minutes</p></div><button className="icon-button" onClick={onClose} aria-label="Close system stats"><X size={22} /></button></div>
+    <aside id="system-panel" className={`side-panel system-panel${open ? ' is-open' : ''}`} hidden={!open} aria-hidden={!open} aria-labelledby="system-panel-title">
+      <div className="render-panel__header"><div><h2 id="system-panel-title">Performance</h2><p>Current Pod · Last 15 minutes</p></div><button className="icon-button" onClick={onClose} aria-label="Close performance panel"><X size={22} /></button></div>
       {!system || !latest ? <div className="system-panel__loading"><Activity size={24} /> Waiting for system telemetry</div> : <div className="system-panel__plots">
         <ResourcePlot label="CPU" color="var(--accent)" samples={samples} value={(sample) => sample.cpuUtilization} detail={() => 'Host utilization'} />
         <ResourcePlot label="GPU" color="var(--green)" samples={samples} value={(sample) => sample.gpuUtilization} detail={() => system.gpus.length ? `${system.gpus.length} GPU${system.gpus.length === 1 ? '' : 's'} · peak utilization` : 'No NVIDIA GPU detected'} />

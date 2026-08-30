@@ -26,9 +26,16 @@ async def _run_command(*args: str, timeout: float = 15) -> tuple[int, str]:
 
 
 class SystemProbe:
-    def __init__(self, blender_bin: Path, data_root: Path, override: tuple[str, ...] = ()):
+    def __init__(
+        self,
+        blender_bin: Path,
+        workspace_root: Path,
+        pod_id: str,
+        override: tuple[str, ...] = (),
+    ):
         self.blender_bin = blender_bin
-        self.data_root = data_root
+        self.workspace_root = workspace_root
+        self.pod_id = pod_id
         self.override = override
         self.blender_version: str | None = None
         self.available_backends: list[Backend] = []
@@ -99,10 +106,11 @@ class SystemProbe:
         return gpus
 
     async def info(self) -> SystemInfo:
-        self.data_root.mkdir(parents=True, exist_ok=True)
-        usage = shutil.disk_usage(self.data_root)
+        self.workspace_root.mkdir(parents=True, exist_ok=True)
+        usage = shutil.disk_usage(self.workspace_root)
         memory = psutil.virtual_memory()
         return SystemInfo(
+            pod_id=self.pod_id,
             blender_version=self.blender_version,
             gpus=await self.gpus(),
             available_backends=self.available_backends,

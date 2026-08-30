@@ -1,10 +1,9 @@
 [project]
 name = "blendrender"
-version = "0.1.0"
+version = "1.0.0"
 description = "Self-contained Blender GPU render node for RunPod"
 requires-python = ">=3.12"
 dependencies = [
-  "aiosqlite>=0.21.0,<1",
   "fastapi>=0.116.0,<1",
   "itsdangerous>=2.2.0,<3",
   "pillow>=11.3.0,<13",
