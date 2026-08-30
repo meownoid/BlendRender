@@ -140,7 +140,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .render-panel__header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
 .render-panel__header p { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
 .dropzone { width: 100%; height: 224px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; border: 1px dashed #4c545d; border-radius: 9px; color: #a6adb4; background: rgba(12,15,18,.28); cursor: pointer; }
-.dropzone:hover { border-color: var(--accent); }
+.dropzone:hover, .dropzone.is-dragging { border-color: var(--accent); background: rgba(255,138,31,.08); }
 .dropzone:disabled { opacity: .55; cursor: not-allowed; }
 .dropzone em { color: var(--accent); font-style: normal; }
 .dropzone strong { max-width: 90%; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
