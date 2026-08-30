@@ -103,14 +103,14 @@ def run() -> None:
     devices = ["CPU"] if cpu_render else enable_backend(backend)
     scene.render.engine = "CYCLES"
     scene.cycles.device = "CPU" if cpu_render else "GPU"
-    if "samples" in config:
-        scene.cycles.samples = int(config["samples"])
-    if "resolution_x" in config:
-        scene.render.resolution_x = int(config["resolution_x"])
-    if "resolution_y" in config:
-        scene.render.resolution_y = int(config["resolution_y"])
-    if "resolution_percentage" in config:
-        scene.render.resolution_percentage = int(config["resolution_percentage"])
+    if (samples := config.get("samples")) is not None:
+        scene.cycles.samples = int(samples)
+    if (resolution_x := config.get("resolution_x")) is not None:
+        scene.render.resolution_x = int(resolution_x)
+    if (resolution_y := config.get("resolution_y")) is not None:
+        scene.render.resolution_y = int(resolution_y)
+    if (resolution_percentage := config.get("resolution_percentage")) is not None:
+        scene.render.resolution_percentage = int(resolution_percentage)
     scene.render.image_settings.file_format = "PNG"
     scene.render.use_file_extension = True
     emit(

@@ -321,6 +321,17 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .jobs-table th { color: #87929c; font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
 .jobs-table td { color: #d7dde3; }
 .jobs-table td:first-child { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.job-table__row { cursor: pointer; outline: none; }
+.job-table__row:hover, .job-table__row:focus-visible, .job-table__row.is-selected { background: #1a2228; }
+.job-table__row:focus-visible { box-shadow: inset 3px 0 0 var(--accent); }
+.job-details-row td { padding: 0; white-space: normal; }
+.job-details { display: grid; gap: 14px; padding: 18px 22px; border-left: 3px solid var(--accent); background: #161d22; }
+.job-details h2, .job-details p { margin: 0; }
+.job-details h2 { font-size: 14px; }
+.job-details p { margin-top: 5px; color: var(--muted); overflow-wrap: anywhere; }
+.job-failure-reason { padding: 11px 13px; border-radius: 5px; color: #ffaaa5; background: #2b1919; font-size: 12px; }
+.job-failure-reason p { color: inherit; }
+.job-log { max-height: 260px; margin: 0; padding: 12px; overflow: auto; border: 1px solid #303a43; border-radius: 5px; color: #cbd3da; background: #0c1013; font-family: 'JetBrains Mono Variable', monospace; font-size: 11px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
 .job-status { color: var(--muted); }
 .job-status--running, .job-status--completed { color: var(--green); }
 .job-status--queued { color: var(--accent); }
