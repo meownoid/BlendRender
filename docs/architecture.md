@@ -22,8 +22,9 @@ render worker owns the queue.
 
 1. The browser authenticates with `APP_PASSWORD`; the API returns a signed, HTTP-only session
    cookie.
-2. A job submission streams a `.blend` upload into `DATA_ROOT/jobs/{job-id}/input.blend`, validates
-   its request fields, and inserts a queued SQLite row.
+2. A job submission streams a `.blend` or project ZIP upload, validates its request fields, and
+   inserts a queued SQLite row. Direct files are stored as `input.blend`; ZIPs are safely extracted
+   into `source/` with a server-generated scene-entrypoint manifest.
 3. `RenderWorker` atomically claims the oldest queued job and writes `render-config.json`.
 4. Blender starts in background mode with `--disable-autoexec` and executes the Blender-side
    runner against the uploaded scene.
@@ -63,13 +64,18 @@ The default data root is `/var/lib/blendrender`:
 └── jobs/
     └── {job-id}/
         ├── input.blend
+        ├── source-entrypoint.json
+        ├── source/
+        │   └── project/scene.blend
         ├── render-config.json
         ├── render.log
         ├── outputs/frame_000001.png
         └── previews/frame_000001.webp
 ```
 
-SQLite uses WAL mode. During application startup, database rows left in `running` are marked
+Direct uploads contain `input.blend`; ZIP uploads instead contain `source/` and
+`source-entrypoint.json`. The staged uploaded ZIP is deleted after extraction. SQLite uses WAL mode.
+During application startup, database rows left in `running` are marked
 `interrupted`. The database also retains the most recent 15 minutes of node telemetry. Files remain
 available, allowing a later retry to reuse valid frames.
 

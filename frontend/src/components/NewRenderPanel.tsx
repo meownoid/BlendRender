@@ -41,8 +41,8 @@ export function NewRenderPanel({ open, system, busy, uploadProgress, onClose, on
 
   function acceptFile(candidate?: File) {
     if (!candidate) return
-    if (!candidate.name.toLowerCase().endsWith('.blend')) {
-      setError('Choose a .blend file with packed assets.')
+    if (!/\.(blend|zip)$/i.test(candidate.name)) {
+      setError('Choose a .blend file or a project .zip archive.')
       return
     }
     setFile(candidate)
@@ -52,7 +52,7 @@ export function NewRenderPanel({ open, system, busy, uploadProgress, onClose, on
   async function submit(event: FormEvent) {
     event.preventDefault()
     if (!file) {
-      setError('Choose a packed .blend file first.')
+      setError('Choose a .blend file or a project .zip archive first.')
       return
     }
     if (mode === 'range' && start > end) {
@@ -79,9 +79,9 @@ export function NewRenderPanel({ open, system, busy, uploadProgress, onClose, on
       <form onSubmit={submit} data-1p-ignore="true">
         <button className={`dropzone${file ? ' has-file' : ''}`} type="button" disabled={busy} onClick={() => inputRef.current?.click()} onDrop={drop} onDragOver={(event) => event.preventDefault()}>
           <FileUp size={56} strokeWidth={1.4} />
-          {file ? <><strong>{file.name}</strong><span>{formatBytes(file.size)}</span></> : <><span>Drop a packed .blend file</span><span>or <em>choose a file</em></span></>}
+          {file ? <><strong>{file.name}</strong><span>{formatBytes(file.size)}</span></> : <><span>Drop a .blend file or project .zip</span><span>ZIPs must contain one .blend and relative resources</span></>}
         </button>
-        <input ref={inputRef} className="visually-hidden" type="file" accept=".blend" disabled={busy} onChange={(event: ChangeEvent<HTMLInputElement>) => acceptFile(event.target.files?.[0])} />
+        <input ref={inputRef} className="visually-hidden" type="file" accept=".blend,.zip" disabled={busy} onChange={(event: ChangeEvent<HTMLInputElement>) => acceptFile(event.target.files?.[0])} />
         <fieldset><legend>Mode</legend><div className="segmented"><button type="button" disabled={busy} className={mode === 'still' ? 'is-selected' : ''} onClick={() => setMode('still')}>Still</button><button type="button" disabled={busy} className={mode === 'range' ? 'is-selected' : ''} onClick={() => setMode('range')}>Frame range</button></div></fieldset>
         {mode === 'still' ? <label className="field field--single">Frame<input type="number" disabled={busy} value={frame} onChange={(event) => setFrame(Number(event.target.value))} /></label> : <div className="range-fields"><label className="field">Start<input type="number" disabled={busy} value={start} onChange={(event) => setStart(Number(event.target.value))} /></label><label className="field">End<input type="number" disabled={busy} value={end} onChange={(event) => setEnd(Number(event.target.value))} /></label></div>}
         <fieldset><legend>Backend</legend><div className="segmented segmented--three">{(['OPTIX', 'CUDA', 'CPU'] as Backend[]).map((value) => <button key={value} type="button" disabled={busy || !system?.available_backends.includes(value)} className={backend === value ? 'is-selected' : ''} onClick={() => setBackend(value)}>{value === 'OPTIX' ? 'OptiX' : value}</button>)}</div></fieldset>

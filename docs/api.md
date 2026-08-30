@@ -65,7 +65,7 @@ refreshes and application restarts.
 
 | Field | Required | Rules |
 | --- | --- | --- |
-| `file` | Yes | Non-empty filename ending in `.blend`; streamed size may not exceed `MAX_UPLOAD_GB` |
+| `file` | Yes | Non-empty `.blend` or `.zip`; uploaded bytes may not exceed `MAX_UPLOAD_GB`. A ZIP must contain exactly one `.blend`, at most 10,000 regular-file/directory entries, and no encrypted, symlink, duplicate, absolute, or traversal paths. Its expanded regular-file bytes may not exceed `MAX_UPLOAD_GB`. |
 | `mode` | Yes | `still` or `range` |
 | `backend` | Yes | `OPTIX`, `CUDA`, or `CPU`; must be available on the node |
 | `frame` | For `still` | Integer frame number |
@@ -76,6 +76,11 @@ refreshes and application restarts.
 
 The request is rejected with `507` when less than 1 GiB is free before upload begins. Optional
 render fields preserve the corresponding active-scene value when omitted.
+
+Project ZIPs preserve their internal directory layout. Blender resources must use relative paths
+that resolve inside the archive; BlendRender does not rewrite or search for asset paths. After the
+ZIP is uploaded, the service also requires enough free disk for its declared extracted size plus
+1 GiB of headroom and returns `507` if that check fails.
 
 Still-render example:
 
@@ -103,6 +108,18 @@ curl --fail --silent --show-error \
   -F start=1 \
   -F end=120 \
   -F backend=OPTIX \
+  "$base_url/api/jobs"
+```
+
+Project ZIP example:
+
+```bash
+curl --fail --silent --show-error \
+  --cookie /tmp/blendrender-cookies \
+  -F file=@project.zip \
+  -F mode=still \
+  -F frame=1 \
+  -F backend=CPU \
   "$base_url/api/jobs"
 ```
 

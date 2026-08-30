@@ -53,7 +53,7 @@ RunPod HTTPS proxy.
 | `BLENDER_BIN` | `/opt/blender/blender` | Blender executable |
 | `RENDERER_SCRIPT` | Repository `renderer/blendrender_render.py` | Python entrypoint executed inside Blender |
 | `FRONTEND_DIST` | Repository `frontend/dist` | Static frontend directory served by FastAPI |
-| `MAX_UPLOAD_GB` | `5` | Maximum streamed upload size in GiB; decimal values are accepted |
+| `MAX_UPLOAD_GB` | `5` | Maximum streamed upload size and total extracted project-ZIP regular-file size in GiB; decimal values are accepted |
 | `COOKIE_SECURE` | `true` | Whether the session cookie is restricted to HTTPS |
 | `SESSION_TTL_SECONDS` | `604800` | Signed session maximum age (7 days by default) |
 | `CANCEL_GRACE_SECONDS` | `8` | Wait after `SIGTERM` before force-killing Blender |
@@ -64,9 +64,10 @@ bypasses capability probing; Blender will still fail when the worker tries to en
 
 ## Storage and capacity
 
-Every job stores the original `.blend`, its full render log, output PNGs, and WebP previews below
-`DATA_ROOT`. A submission is refused when less than 1 GiB is free before the upload starts, but the
-application does not reserve space for the upload or render.
+Every job stores its direct `.blend` or extracted project ZIP source, its full render log, output
+PNGs, and WebP previews below `DATA_ROOT`. A submission is refused when less than 1 GiB is free
+before the upload starts. ZIP extraction additionally requires the declared expanded size plus
+1 GiB of remaining free space; upload and render output are still not reserved in advance.
 
 Use container disk for the intended ephemeral model. If data must survive Pod replacement, mount a
 writable volume at `DATA_ROOT` and back it up as one unit. Do not share that directory between

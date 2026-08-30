@@ -16,10 +16,15 @@ def test_blender_driver_renders_tiny_scene_and_preserves_settings(tmp_path: Path
     if blender is None:
         pytest.skip("Blender is not installed")
 
-    scene_path = tmp_path / "smoke.blend"
+    project_root = tmp_path / "project"
+    scene_path = project_root / "scenes" / "smoke.blend"
+    texture_path = project_root / "textures" / "albedo.png"
     output_dir = tmp_path / "outputs"
     report_path = tmp_path / "report.json"
     generator = tmp_path / "create_scene.py"
+    scene_path.parent.mkdir(parents=True)
+    texture_path.parent.mkdir(parents=True)
+    Image.new("RGB", (2, 2), (240, 60, 40)).save(texture_path, "PNG")
     generator.write_text(
         """
 import bpy
@@ -38,6 +43,7 @@ scene.use_nodes = True
 bpy.ops.object.select_all(action="SELECT")
 bpy.ops.object.delete(use_global=False)
 bpy.ops.mesh.primitive_cube_add(location=(0, 0, 0))
+cube = bpy.context.object
 bpy.ops.object.camera_add(location=(4, -4, 3), rotation=(math.radians(67), 0, math.radians(46)))
 scene.camera = bpy.context.object
 scene.camera.name = "SmokeCamera"
@@ -45,7 +51,16 @@ bpy.ops.object.light_add(type="AREA", location=(2, -2, 4))
 bpy.context.object.data.energy = 800
 bpy.context.object.data.shape = "DISK"
 bpy.context.object.data.size = 5
-bpy.ops.wm.save_as_mainfile(filepath=sys.argv[sys.argv.index("--") + 1])
+arguments = sys.argv[sys.argv.index("--") + 1:]
+image = bpy.data.images.load(arguments[0])
+image.name = "Albedo"
+image.filepath = "//../textures/albedo.png"
+material = bpy.data.materials.new("SmokeMaterial")
+material.use_nodes = True
+texture_node = material.node_tree.nodes.new("ShaderNodeTexImage")
+texture_node.image = image
+cube.data.materials.append(material)
+bpy.ops.wm.save_as_mainfile(filepath=arguments[1])
 """,
         encoding="utf-8",
     )
@@ -57,6 +72,7 @@ bpy.ops.wm.save_as_mainfile(filepath=sys.argv[sys.argv.index("--") + 1])
             "--python",
             str(generator),
             "--",
+            str(texture_path),
             str(scene_path),
         ],
         check=True,
@@ -72,6 +88,7 @@ bpy.ops.wm.save_as_mainfile(filepath=sys.argv[sys.argv.index("--") + 1])
                 "backend": "CPU",
                 "frames": [1],
                 "output_dir": str(output_dir),
+                "project_root": str(project_root),
                 "diagnostic_report": str(report_path),
             }
         ),
@@ -117,3 +134,53 @@ bpy.ops.wm.save_as_mainfile(filepath=sys.argv[sys.argv.index("--") + 1])
         "engine": "CYCLES",
         "file_format": "PNG",
     }
+
+    outside_texture = tmp_path / "outside.png"
+    Image.new("RGB", (2, 2), (20, 40, 220)).save(outside_texture, "PNG")
+    rewrite = tmp_path / "rewrite_asset_path.py"
+    rewrite.write_text(
+        """
+import bpy
+import sys
+
+bpy.data.images["Albedo"].filepath = sys.argv[sys.argv.index("--") + 1]
+bpy.ops.wm.save_as_mainfile(filepath=bpy.data.filepath)
+""",
+        encoding="utf-8",
+    )
+    subprocess.run(
+        [
+            blender,
+            "--background",
+            "--disable-autoexec",
+            str(scene_path),
+            "--python",
+            str(rewrite),
+            "--",
+            str(outside_texture),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    rejected = subprocess.run(
+        [
+            blender,
+            "--background",
+            "--disable-autoexec",
+            "--python-exit-code",
+            "1",
+            str(scene_path),
+            "--python",
+            str(renderer),
+            "--",
+            str(config_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert rejected.returncode != 0
+    assert "image uses an absolute path" in rejected.stdout

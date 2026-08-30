@@ -28,6 +28,17 @@ test('selects CPU when it is the only available backend and submits it', async (
   await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ backend: 'CPU' })))
 })
 
+test('accepts a project ZIP archive', async () => {
+  const onSubmit = vi.fn().mockResolvedValue(undefined)
+  const { container } = render(<NewRenderPanel open system={cpuOnlySystem} busy={false} uploadProgress={null} onClose={vi.fn()} onSubmit={onSubmit} />)
+  const input = container.querySelector('input[type="file"]')
+  expect(input).toHaveAttribute('accept', '.blend,.zip')
+  fireEvent.change(input as HTMLInputElement, { target: { files: [new File(['zip'], 'project.zip')] } })
+  fireEvent.click(screen.getByRole('button', { name: 'Queue render' }))
+  await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+  expect((onSubmit.mock.calls[0][0] as { file: File }).file.name).toBe('project.zip')
+})
+
 test('shows upload progress and disables render controls', () => {
   render(
     <NewRenderPanel

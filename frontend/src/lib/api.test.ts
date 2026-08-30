@@ -72,7 +72,7 @@ const job: Job = {
 }
 
 const form: RenderForm = {
-  file: new File(['blend'], 'scene.blend'),
+  file: new File(['zip'], 'project.zip'),
   mode: 'still',
   frame: 1,
   start: 1,
@@ -98,6 +98,7 @@ test('uploads job fields with progress and resolves the created job', async () =
   expect(request.withCredentials).toBe(true)
   const body = request.send.mock.calls[0][0] as FormData
   expect(body.get('file')).toBe(form.file)
+  expect((body.get('file') as File).name).toBe('project.zip')
   expect(body.get('mode')).toBe('still')
   expect(body.get('frame')).toBe('1')
   expect(body.get('backend')).toBe('CPU')

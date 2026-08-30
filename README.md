@@ -28,7 +28,9 @@ backend are available.
 
 ## Render contract
 
-- Upload one `.blend` file with all external assets packed into it.
+- Upload a self-contained `.blend`, or a project `.zip` containing exactly one `.blend` plus its
+  external resources. ZIP directory structure is preserved, so resource paths must be Blender
+  relative paths within the archive; linked-library `.blend` files must be made local.
 - The active scene and camera are used.
 - Resolution, samples, denoising, compositor, and color management are preserved.
 - The worker overrides the engine, selected compute backend, requested frames, output location,

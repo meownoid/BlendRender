@@ -39,7 +39,7 @@ export function RenderWorkspace({ job, onCancel, onRetry, onDelete }: RenderWork
   const previewUrl = job && previewFrame != null ? api.frameUrl(job.id, previewFrame, true) : null
 
   if (!job) {
-    return <main className="workspace workspace--empty"><div><h1>No render selected</h1><p>Queue a packed .blend file to begin.</p></div></main>
+    return <main className="workspace workspace--empty"><div><h1>No render selected</h1><p>Queue a .blend file or project ZIP to begin.</p></div></main>
   }
 
   function toggleFrame(frame: number) {

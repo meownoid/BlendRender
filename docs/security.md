@@ -28,7 +28,9 @@ uploaded source projects as well as output and should be protected accordingly.
   data, and camera/microphone/geolocation access.
 - Uploaded paths are derived from generated UUIDs. Original filenames are reduced to their base
   name and are used only as metadata/download naming.
-- Uploads are streamed and size-limited; archive selections must refer to available frames.
+- Uploads are streamed and size-limited. Project ZIPs are limited by both compressed upload and
+  extracted regular-file size, then extracted only after rejecting encrypted, special, duplicate,
+  absolute, and traversal entries. Archive selections must refer to available frames.
 
 These controls do not provide per-user identity, revocation, audit history, network rate limiting,
 or authorization boundaries between jobs.

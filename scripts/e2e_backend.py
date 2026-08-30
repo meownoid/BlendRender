@@ -64,7 +64,7 @@ class Client:
         return json.loads(raw) if raw else {}
 
 
-def multipart_job(blend_path: Path) -> tuple[bytes, str]:
+def multipart_job(filename: str, content: bytes) -> tuple[bytes, str]:
     boundary = f"blendrender-e2e-{uuid.uuid4().hex}"
     parts: list[bytes] = []
 
@@ -90,15 +90,23 @@ def multipart_job(blend_path: Path) -> tuple[bytes, str]:
             f"--{boundary}\r\n".encode(),
             (
                 f'Content-Disposition: form-data; name="file"; '
-                f'filename="{blend_path.name}"\r\n'
+                f'filename="{filename}"\r\n'
             ).encode(),
             b"Content-Type: application/octet-stream\r\n\r\n",
-            blend_path.read_bytes(),
+            content,
             b"\r\n",
             f"--{boundary}--\r\n".encode(),
         ]
     )
     return b"".join(parts), f"multipart/form-data; boundary={boundary}"
+
+
+def project_zip(blend_path: Path) -> bytes:
+    payload = BytesIO()
+    with zipfile.ZipFile(payload, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
+        bundle.writestr(f"project/scenes/{blend_path.name}", blend_path.read_bytes())
+        bundle.writestr("project/resources/.keep", b"")
+    return payload.getvalue()
 
 
 def main() -> None:
@@ -118,7 +126,7 @@ def main() -> None:
     system = client.json("GET", "/api/system")
     assert "CPU" in system["available_backends"]
 
-    upload, content_type = multipart_job(args.blend)
+    upload, content_type = multipart_job("project.zip", project_zip(args.blend))
     raw, _ = client.request(
         "POST", "/api/jobs", body=upload, content_type=content_type, expected=201
     )
@@ -128,8 +136,9 @@ def main() -> None:
     assert job["resolution_x"] == 320
     assert job["resolution_y"] == 180
     assert job["resolution_percentage"] == 5
+    assert job["filename"] == args.blend.name
     job_id = job["id"]
-    print(f"queued {job_id} from {args.blend.name}", flush=True)
+    print(f"queued {job_id} from project.zip", flush=True)
 
     deadline = time.monotonic() + args.timeout
     last_status = None

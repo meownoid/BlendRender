@@ -7,7 +7,8 @@ import shutil
 import signal
 import time
 from contextlib import suppress
-from pathlib import Path
+from dataclasses import dataclass
+from pathlib import Path, PureWindowsPath
 
 from PIL import Image, UnidentifiedImageError
 
@@ -33,11 +34,49 @@ def job_paths(settings: Settings, job_id: str) -> dict[str, Path]:
     return {
         "root": root,
         "input": root / "input.blend",
+        "upload": root / "upload.zip",
+        "source": root / "source",
+        "entrypoint": root / "source-entrypoint.json",
         "outputs": root / "outputs",
         "previews": root / "previews",
         "log": root / "render.log",
         "config": root / "render-config.json",
     }
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectInput:
+    scene_path: Path
+    resource_root: Path
+
+
+def resolve_job_input(settings: Settings, job_id: str) -> ProjectInput:
+    """Return the direct upload or the validated scene selected from a project ZIP."""
+    paths = job_paths(settings, job_id)
+    if paths["input"].is_file():
+        return ProjectInput(paths["input"].resolve(), paths["root"].resolve())
+
+    source_root = paths["source"].resolve()
+    try:
+        payload = json.loads(paths["entrypoint"].read_text(encoding="utf-8"))
+        relative = Path(payload["scene"])
+    except (KeyError, OSError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError("Project ZIP is missing a valid scene entrypoint") from exc
+    if (
+        relative.is_absolute()
+        or PureWindowsPath(str(relative)).drive
+        or "\\" in str(relative)
+        or any(part in {".", ".."} for part in relative.parts)
+    ):
+        raise ValueError("Project ZIP contains an unsafe scene entrypoint")
+    scene_path = (source_root / relative).resolve()
+    if (
+        not scene_path.is_relative_to(source_root)
+        or scene_path.suffix.lower() != ".blend"
+        or not scene_path.is_file()
+    ):
+        raise ValueError("Project ZIP scene entrypoint is unavailable")
+    return ProjectInput(scene_path, source_root)
 
 
 def verify_png(path: Path) -> bool:
@@ -129,27 +168,6 @@ class RenderWorker:
             for frame in range(job.frame_start, job.frame_end + 1)
             if frame not in set(completed)
         ]
-        config: dict[str, object] = {
-            "backend": job.backend.value,
-            "frames": remaining,
-            "output_dir": str(paths["outputs"]),
-        }
-        for field in ("samples", "resolution_x", "resolution_y", "resolution_percentage"):
-            if (value := getattr(job, field)) is not None:
-                config[field] = value
-        paths["config"].write_text(json.dumps(config), encoding="utf-8")
-        command = [
-            str(self.settings.blender_bin),
-            "--background",
-            "--disable-autoexec",
-            "--python-exit-code",
-            "1",
-            str(paths["input"]),
-            "--python",
-            str(self.settings.renderer_script),
-            "--",
-            str(paths["config"]),
-        ]
         started = time.monotonic()
         frame_durations: list[float] = []
         log_tail = ""
@@ -193,6 +211,29 @@ class RenderWorker:
             )
 
         try:
+            project_input = resolve_job_input(self.settings, job.id)
+            config: dict[str, object] = {
+                "backend": job.backend.value,
+                "frames": remaining,
+                "output_dir": str(paths["outputs"]),
+                "project_root": str(project_input.resource_root),
+            }
+            for field in ("samples", "resolution_x", "resolution_y", "resolution_percentage"):
+                if (value := getattr(job, field)) is not None:
+                    config[field] = value
+            paths["config"].write_text(json.dumps(config), encoding="utf-8")
+            command = [
+                str(self.settings.blender_bin),
+                "--background",
+                "--disable-autoexec",
+                "--python-exit-code",
+                "1",
+                str(project_input.scene_path),
+                "--python",
+                str(self.settings.renderer_script),
+                "--",
+                str(paths["config"]),
+            ]
             self._current_job_id = job.id
             self._process = await asyncio.create_subprocess_exec(
                 *command,

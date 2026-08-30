@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import sys
 import time
@@ -30,23 +29,29 @@ def config_path() -> Path:
     return Path(arguments[0]).resolve()
 
 
-def missing_external_assets() -> list[str]:
-    missing: list[str] = []
+def unavailable_external_assets(project_root: Path) -> list[str]:
+    unavailable: list[str] = []
+
+    def validate(kind: str, filepath: str) -> None:
+        if not filepath.startswith("//"):
+            unavailable.append(f"{kind} uses an absolute path: {filepath}")
+            return
+        path = Path(bpy.path.abspath(filepath)).resolve()
+        if not path.is_relative_to(project_root):
+            unavailable.append(f"{kind} is outside the uploaded project: {filepath}")
+        elif not path.is_file():
+            unavailable.append(f"missing {kind}: {filepath}")
+
     for image in bpy.data.images:
         if image.source == "FILE" and not image.packed_file and image.filepath:
-            path = bpy.path.abspath(image.filepath)
-            if not os.path.exists(path):
-                missing.append(path)
+            validate("image", image.filepath)
     for library in bpy.data.libraries:
-        path = bpy.path.abspath(library.filepath)
-        if path and not os.path.exists(path):
-            missing.append(path)
+        if library.filepath:
+            validate("linked library", library.filepath)
     for sound in bpy.data.sounds:
         if not sound.packed_file and sound.filepath:
-            path = bpy.path.abspath(sound.filepath)
-            if not os.path.exists(path):
-                missing.append(path)
-    return sorted(set(missing))
+            validate("sound", sound.filepath)
+    return sorted(set(unavailable))
 
 
 def enable_backend(backend: str) -> list[str]:
@@ -82,16 +87,17 @@ def run() -> None:
     backend = str(config["backend"])
     frames = [int(frame) for frame in config["frames"]]
     output_dir = Path(config["output_dir"]).resolve()
+    project_root = Path(str(config.get("project_root", Path(bpy.data.filepath).parent))).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
     scene = bpy.context.scene
     if scene.camera is None:
         raise RuntimeError("The active scene does not have an active camera")
-    missing = missing_external_assets()
-    if missing:
-        sample = ", ".join(missing[:5])
-        suffix = "" if len(missing) <= 5 else f" and {len(missing) - 5} more"
-        raise RuntimeError(f"Project contains missing unpacked assets: {sample}{suffix}")
+    unavailable = unavailable_external_assets(project_root)
+    if unavailable:
+        sample = ", ".join(unavailable[:5])
+        suffix = "" if len(unavailable) <= 5 else f" and {len(unavailable) - 5} more"
+        raise RuntimeError(f"Project contains unavailable unpacked assets: {sample}{suffix}")
 
     cpu_render = backend == "CPU"
     devices = ["CPU"] if cpu_render else enable_backend(backend)

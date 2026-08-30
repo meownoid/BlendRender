@@ -2,16 +2,18 @@
 
 ## Scene input requirements
 
-- Supply exactly one `.blend` file.
-- Pack external images and sounds into the project.
-- Make linked library data local so the upload is self-contained; references to separate library
-  files cause the job to fail.
+- Supply a `.blend` file, or a `.zip` that contains exactly one `.blend` plus external resources.
+- A ZIP preserves its directory tree. Unpacked images and sounds must use Blender-relative paths
+  that resolve within the archive; BlendRender does not rewrite paths or search for missing files.
+- Pack external images and sounds when uploading a standalone `.blend`.
+- Make linked library data local. Project ZIPs intentionally allow only one `.blend`, so separate
+  library files are rejected.
 - Configure an active camera in the active scene.
 - Verify the scene at the requested frame or frame range before upload.
 
-The renderer explicitly detects missing unpacked file-backed images, libraries, and sounds. Other
-external dependencies, add-ons, fonts, caches, simulations, or system resources may still fail at
-render time and should be baked or packed where Blender supports it.
+The renderer explicitly detects missing, absolute, and out-of-project unpacked file-backed images,
+libraries, and sounds. Other external dependencies, add-ons, fonts, caches, simulations, or system
+resources may still fail at render time and should be baked or included where Blender supports it.
 
 ## Settings preserved and overridden
 

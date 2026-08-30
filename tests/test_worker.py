@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from typing import Any, cast
 
 from blendrender.db import Database
 from blendrender.models import Backend, Job, JobStatus
-from blendrender.worker import RenderWorker
+from blendrender.worker import RenderWorker, job_paths
 
 
 class RecordingDatabase:
@@ -74,8 +75,18 @@ async def test_worker_records_frame_sample_telemetry(settings, monkeypatch) -> N
     )
     database = WorkerDatabase(job)
     worker = RenderWorker(settings, cast(Database, database))
+    paths = job_paths(settings, job.id)
+    scene = paths["source"] / "project/scenes/main.blend"
+    scene.parent.mkdir(parents=True)
+    scene.write_bytes(b"BLENDER-v1-test-data")
+    paths["entrypoint"].write_text(
+        json.dumps({"scene": "project/scenes/main.blend"}),
+        encoding="utf-8",
+    )
+    invocation: list[object] = []
 
-    async def create_process(*_: object, **__: object) -> FakeProcess:
+    async def create_process(*command: object, **_: object) -> FakeProcess:
+        invocation.extend(command)
         return FakeProcess(
             [
                 b'BLENDRENDER_EVENT {"type":"frame_started","frame":1}\n',
@@ -88,6 +99,7 @@ async def test_worker_records_frame_sample_telemetry(settings, monkeypatch) -> N
     monkeypatch.setattr("blendrender.worker.asyncio.create_subprocess_exec", create_process)
     await worker._run(job)
 
+    assert str(scene.resolve()) in invocation
     assert any(
         update.get("current_frame") == 1
         and update.get("sample_current") == 32

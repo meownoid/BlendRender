@@ -84,9 +84,9 @@ Markdown links should still be checked.
 - Frontend tests use Vitest, Testing Library, and jsdom.
 - `tests/test_blender_smoke.py` requires a compatible Blender binary and verifies scene settings
   and rendered output. It skips when Blender is unavailable.
-- `just e2e-backend` builds a production-shaped container, uploads
-  `tests/fixtures/test.blend`, renders one CPU sample at a reduced resolution, validates PNG, WebP,
-  and ZIP downloads, then deletes the job.
+- `just e2e-backend` builds a production-shaped container, packages
+  `tests/fixtures/test.blend` as a project ZIP, renders one CPU sample at a reduced resolution,
+  validates PNG, WebP, and ZIP downloads, then deletes the job.
 
 Apple Silicon cannot validate NVIDIA passthrough. Run final OptiX and CUDA smoke tests on an RTX
 RunPod Pod.

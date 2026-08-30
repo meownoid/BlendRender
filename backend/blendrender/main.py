@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import shutil
 import tempfile
@@ -29,6 +30,12 @@ from .models import (
     SessionResponse,
     SystemInfo,
     TelemetrySample,
+)
+from .project_archive import (
+    ProjectArchiveCapacityError,
+    ProjectArchiveError,
+    extract_project_archive,
+    inspect_project_archive,
 )
 from .system import SystemProbe
 from .telemetry import TelemetryCollector
@@ -159,8 +166,12 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
                 detail=f"{backend.value} is not available on this Pod",
             )
         original_name = Path(file.filename or "").name
-        if not original_name.lower().endswith(".blend"):
-            raise HTTPException(status_code=422, detail="Only .blend files are accepted")
+        suffix = Path(original_name).suffix.lower()
+        if suffix not in {".blend", ".zip"}:
+            raise HTTPException(
+                status_code=422,
+                detail="Only .blend files and project ZIP archives are accepted",
+            )
         if mode == "still":
             if frame is None:
                 raise HTTPException(
@@ -201,7 +212,8 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
         paths["root"].mkdir(parents=True)
         size = 0
         try:
-            with paths["input"].open("wb") as destination:
+            upload_path = paths["upload"] if suffix == ".zip" else paths["input"]
+            with upload_path.open("wb") as destination:
                 while chunk := await file.read(8 * 1024 * 1024):
                     size += len(chunk)
                     if size > resolved.max_upload_bytes:
@@ -211,10 +223,44 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
                         )
                     destination.write(chunk)
             if size == 0:
-                raise HTTPException(status_code=422, detail="The uploaded .blend file is empty")
+                raise HTTPException(status_code=422, detail="The uploaded project file is empty")
+            job_filename = original_name
+            if suffix == ".zip":
+                try:
+                    manifest = await asyncio.to_thread(
+                        inspect_project_archive,
+                        paths["upload"],
+                        paths["source"],
+                        resolved.max_upload_bytes,
+                    )
+                except ProjectArchiveError as exc:
+                    raise HTTPException(status_code=422, detail=str(exc)) from exc
+                if shutil.disk_usage(resolved.data_root).free < manifest.total_size + 1024**3:
+                    raise HTTPException(
+                        status_code=507,
+                        detail="Insufficient disk space to extract the uploaded ZIP archive",
+                    )
+                try:
+                    await asyncio.to_thread(
+                        extract_project_archive,
+                        paths["upload"],
+                        paths["source"],
+                        manifest,
+                        resolved.max_upload_bytes,
+                    )
+                except ProjectArchiveCapacityError as exc:
+                    raise HTTPException(status_code=507, detail=str(exc)) from exc
+                except ProjectArchiveError as exc:
+                    raise HTTPException(status_code=422, detail=str(exc)) from exc
+                paths["entrypoint"].write_text(
+                    json.dumps({"scene": manifest.scene_relative_path.as_posix()}),
+                    encoding="utf-8",
+                )
+                paths["upload"].unlink()
+                job_filename = manifest.scene_path.name
             job = await database.create_job(
                 job_id=job_id,
-                filename=original_name,
+                filename=job_filename,
                 mode=mode,
                 frame_start=frame_start,
                 frame_end=frame_end,
