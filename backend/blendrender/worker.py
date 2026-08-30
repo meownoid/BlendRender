@@ -14,9 +14,10 @@ from PIL import Image, UnidentifiedImageError
 from .config import Settings
 from .db import Database
 from .models import TERMINAL_STATUSES, Job, JobStatus, utc_now
-from .progress import overall_progress, parse_renderer_line
+from .progress import estimate_remaining_seconds, overall_progress, parse_renderer_line
 
 LOG_TAIL_LIMIT = 12_000
+ELAPSED_UPDATE_INTERVAL_SECONDS = 1.0
 
 
 def frame_filename(frame: int) -> str:
@@ -154,6 +155,41 @@ class RenderWorker:
         log_tail = ""
         current_frame: int | None = None
         last_progress_update = 0.0
+        elapsed_task: asyncio.Task[None] | None = None
+
+        async def update_sample_progress(
+            sample_current: int,
+            sample_total: int,
+            frame_remaining_seconds: float | None = None,
+        ) -> None:
+            nonlocal last_progress_update
+            now = time.monotonic()
+            if now - last_progress_update < 0.5 and frame_remaining_seconds is None:
+                return
+            last_progress_update = now
+            average = sum(frame_durations) / len(frame_durations) if frame_durations else None
+            await self.database.update(
+                job.id,
+                current_frame=current_frame,
+                progress=overall_progress(
+                    completed_count=len(completed),
+                    total_frames=job.total_frames,
+                    sample_current=sample_current,
+                    sample_total=sample_total,
+                ),
+                elapsed_seconds=now - started,
+                eta_seconds=estimate_remaining_seconds(
+                    elapsed_seconds=now - started,
+                    completed_count=len(completed),
+                    total_frames=job.total_frames,
+                    sample_current=sample_current,
+                    sample_total=sample_total,
+                    frame_average_seconds=average,
+                    frame_remaining_seconds=frame_remaining_seconds,
+                ),
+                log_tail=log_tail,
+            )
+
         try:
             self._current_job_id = job.id
             self._process = await asyncio.create_subprocess_exec(
@@ -163,6 +199,10 @@ class RenderWorker:
                 start_new_session=True,
             )
             assert self._process.stdout is not None
+            elapsed_task = asyncio.create_task(
+                self._record_elapsed(job.id, started),
+                name=f"blendrender-elapsed-{job.id}",
+            )
             with paths["log"].open("a", encoding="utf-8") as log_file:
                 async for raw_line in self._process.stdout:
                     line = raw_line.decode(errors="replace")
@@ -208,6 +248,21 @@ class RenderWorker:
                                 eta_seconds=eta,
                                 log_tail=log_tail,
                             )
+                        elif event_type == "frame_progress":
+                            current_frame = int(parsed.event["frame"])
+                            sample_current = int(parsed.event.get("sample_current", 0))
+                            sample_total = int(parsed.event.get("sample_total", 1))
+                            reported_remaining = parsed.event.get("remaining_seconds")
+                            frame_remaining_seconds = (
+                                float(reported_remaining)
+                                if isinstance(reported_remaining, int | float)
+                                else None
+                            )
+                            await update_sample_progress(
+                                sample_current,
+                                sample_total,
+                                frame_remaining_seconds,
+                            )
                         elif event_type == "error":
                             await self.database.update(
                                 job.id,
@@ -215,21 +270,10 @@ class RenderWorker:
                                 log_tail=log_tail,
                             )
                     elif parsed.sample_current is not None:
-                        now = time.monotonic()
-                        if now - last_progress_update >= 0.5:
-                            last_progress_update = now
-                            await self.database.update(
-                                job.id,
-                                current_frame=current_frame,
-                                progress=overall_progress(
-                                    completed_count=len(completed),
-                                    total_frames=job.total_frames,
-                                    sample_current=parsed.sample_current,
-                                    sample_total=parsed.sample_total or 1,
-                                ),
-                                elapsed_seconds=now - started,
-                                log_tail=log_tail,
-                            )
+                        await update_sample_progress(
+                            parsed.sample_current,
+                            parsed.sample_total or 1,
+                        )
             return_code = await self._process.wait()
             latest = await self.database.get_job(job.id)
             if latest is None:
@@ -270,8 +314,20 @@ class RenderWorker:
                     log_tail=log_tail,
                 )
         finally:
+            if elapsed_task is not None:
+                elapsed_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await elapsed_task
             self._process = None
             self._current_job_id = None
+
+    async def _record_elapsed(self, job_id: str, started: float) -> None:
+        while True:
+            await asyncio.sleep(ELAPSED_UPDATE_INTERVAL_SECONDS)
+            await self.database.update(
+                job_id,
+                elapsed_seconds=time.monotonic() - started,
+            )
 
     async def _terminate_current(self) -> None:
         process = self._process

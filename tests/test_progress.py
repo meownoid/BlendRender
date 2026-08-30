@@ -1,4 +1,4 @@
-from blendrender.progress import overall_progress, parse_renderer_line
+from blendrender.progress import estimate_remaining_seconds, overall_progress, parse_renderer_line
 
 
 def test_parses_machine_event() -> None:
@@ -19,3 +19,30 @@ def test_overall_progress_combines_frames_and_samples() -> None:
         sample_current=64,
         sample_total=128,
     ) == 62.5
+
+
+def test_estimate_remaining_seconds_uses_sample_progress_for_a_single_frame() -> None:
+    assert estimate_remaining_seconds(
+        elapsed_seconds=20,
+        completed_count=0,
+        total_frames=1,
+        sample_current=50,
+        sample_total=100,
+    ) == 20
+
+
+def test_estimate_remaining_seconds_projects_the_current_frame_to_future_frames() -> None:
+    assert estimate_remaining_seconds(
+        elapsed_seconds=20,
+        completed_count=0,
+        total_frames=3,
+        frame_remaining_seconds=40,
+    ) == 160
+
+
+def test_estimate_remaining_seconds_requires_frame_progress() -> None:
+    assert estimate_remaining_seconds(
+        elapsed_seconds=20,
+        completed_count=0,
+        total_frames=1,
+    ) is None

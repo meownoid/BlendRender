@@ -43,3 +43,27 @@ def overall_progress(
         return 0
     fraction = min(1.0, max(0.0, sample_current / sample_total if sample_total else 0))
     return min(99.9, max(0.0, (completed_count + fraction) / total_frames * 100))
+
+
+def estimate_remaining_seconds(
+    *,
+    elapsed_seconds: float,
+    completed_count: int,
+    total_frames: int,
+    sample_current: int = 0,
+    sample_total: int = 1,
+    frame_average_seconds: float | None = None,
+    frame_remaining_seconds: float | None = None,
+) -> float | None:
+    """Estimate the entire job's remaining duration from the active frame."""
+    if total_frames <= completed_count:
+        return 0
+    if frame_remaining_seconds is None and sample_current > 0 and sample_total > 0:
+        fraction = min(1.0, sample_current / sample_total)
+        frame_remaining_seconds = elapsed_seconds * (1 - fraction) / fraction
+    if frame_remaining_seconds is None:
+        return None
+
+    frames_after_current = max(0, total_frames - completed_count - 1)
+    estimated_frame_seconds = frame_average_seconds or (elapsed_seconds + frame_remaining_seconds)
+    return max(0.0, frame_remaining_seconds + frames_after_current * estimated_frame_seconds)

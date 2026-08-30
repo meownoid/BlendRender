@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 import traceback
@@ -12,6 +13,8 @@ from pathlib import Path
 import bpy
 
 PREFIX = "BLENDRENDER_EVENT "
+SAMPLE_PATTERN = re.compile(r"Sample\s+(\d+)\s*/\s*(\d+)")
+REMAINING_PATTERN = re.compile(r"Remaining:\s+(?:(\d+):)?(\d+):(\d+(?:\.\d+)?)")
 
 
 def emit(event_type: str, **payload: object) -> None:
@@ -60,6 +63,20 @@ def enable_backend(backend: str) -> list[str]:
     return enabled
 
 
+def emit_render_progress(frame: int, stats: str) -> None:
+    payload: dict[str, object] = {"frame": frame}
+    if sample_match := SAMPLE_PATTERN.search(stats):
+        payload["sample_current"] = int(sample_match.group(1))
+        payload["sample_total"] = int(sample_match.group(2))
+    if remaining_match := REMAINING_PATTERN.search(stats):
+        hours = int(remaining_match.group(1) or 0)
+        minutes = int(remaining_match.group(2))
+        seconds = float(remaining_match.group(3))
+        payload["remaining_seconds"] = hours * 3600 + minutes * 60 + seconds
+    if len(payload) > 1:
+        emit("frame_progress", **payload)
+
+
 def run() -> None:
     config = json.loads(config_path().read_text(encoding="utf-8"))
     backend = str(config["backend"])
@@ -97,7 +114,15 @@ def run() -> None:
         scene.frame_set(frame)
         scene.render.filepath = str(output_dir / f"frame_{frame:06d}.png")
         emit("frame_started", frame=frame)
-        bpy.ops.render.render(write_still=True)
+
+        def render_stats_handler(stats: str, _: object, *, rendered_frame: int = frame) -> None:
+            emit_render_progress(rendered_frame, stats)
+
+        bpy.app.handlers.render_stats.append(render_stats_handler)
+        try:
+            bpy.ops.render.render(write_still=True)
+        finally:
+            bpy.app.handlers.render_stats.remove(render_stats_handler)
         emit("frame_completed", frame=frame, seconds=time.monotonic() - started)
     if report_path := config.get("diagnostic_report"):
         Path(str(report_path)).write_text(
