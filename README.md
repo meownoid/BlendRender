@@ -13,7 +13,7 @@ PNG/WebP variant along with backend, hardware, samples, pod, and render-duration
 1. Build and publish the Linux image:
 
    ```bash
-   docker buildx build --platform linux/amd64 -t YOUR_REGISTRY/blendrender:1.0.0 --push .
+   docker buildx build --platform linux/amd64 -t YOUR_REGISTRY/blendrender:2.0.0 --push .
    ```
 
 2. Create one or more Secure Cloud Pods from that image, attach the **same network volume** to each,
