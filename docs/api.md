@@ -5,10 +5,28 @@ Mutating browser requests must be same-origin.
 
 ## Scenes
 
-`POST /api/scenes` accepts multipart `file` and an optional `name`. The file must be a non-empty
-`.blend` or project ZIP containing exactly one `.blend` and safe relative assets. A blank or omitted
-name defaults to the sanitized uploaded filename. It returns a scene object. Uploading a scene never
-queues a render.
+Create a scene through an authenticated resumable upload session. The browser sends at most 8 MiB
+per request by default, avoiding long-lived RunPod proxy connections and writing directly to the
+shared workspace. Operators may set `UPLOAD_CHUNK_MB` to another positive whole-MiB value.
+
+`POST /api/uploads` accepts JSON with `filename`, `size_bytes`, and optional `name`; it returns an
+upload session containing its UUID, byte offset, chunk size, expiry, and status. The filename must
+end in `.blend` or `.zip`, and its declared size must not exceed `MAX_UPLOAD_GB`.
+
+`PATCH /api/uploads/{id}` accepts raw `application/octet-stream` bytes and an `Upload-Offset`
+header. Send exactly the next contiguous chunk, no larger than the returned `chunk_size_bytes`.
+The response confirms the committed `uploaded_bytes`. On a `409`, use the returned session or
+`Upload-Offset` response header to resume from the server's committed offset.
+
+`POST /api/uploads/{id}/complete` begins validation and extraction after all bytes arrive and
+returns `202` immediately. Poll `GET /api/uploads/{id}` until it reports `completed` with a `scene`
+object, or `failed` with an error. `DELETE /api/uploads/{id}` discards an unfinished transfer.
+Inactive or failed staging uploads expire after 24 hours; a finalizing upload is recovered after an
+application restart.
+
+A complete upload must be a non-empty `.blend` or project ZIP containing exactly one `.blend` and
+safe relative assets. Uploading a scene never queues a render. ZIPs may contain up to 100,000
+entries and are limited by both compressed upload bytes and extracted regular-file bytes.
 
 `GET /api/scenes` lists shared scenes. `GET /api/scenes/{id}` returns one. `DELETE /api/scenes/{id}`
 removes its source, results, and terminal jobs; it returns `409` while any associated job is queued

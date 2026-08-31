@@ -48,7 +48,8 @@ Create a RunPod **Pod**, not a serverless endpoint, with:
 - configured GHCR credentials if the image is private;
 - an RTX-class NVIDIA GPU for OptiX;
 - HTTP port `8000`;
-- at least 20 GB of container disk, with more for large projects or frame ranges;
+- at least 20 GB of container disk for the image and temporary archive responses;
+- a network volume with at least 41 GiB free when accepting the default maximum project ZIP; and
 - a long, random `APP_PASSWORD`; and
 - the same Secure Cloud network volume mounted at `/workspace` as its peer Pods.
 
@@ -64,13 +65,16 @@ RunPod HTTPS proxy.
 | `BLENDRENDER_POD_ID` | `RUNPOD_POD_ID`, then hostname | Development override for Pod ownership |
 | `BLENDER_BIN` | `/opt/blender/blender` | Blender executable |
 | `RENDERER_SCRIPT` | bundled renderer | Blender-side runner |
-| `MAX_UPLOAD_GB` | `5` | Upload and extracted ZIP limit |
+| `MAX_UPLOAD_GB` | `20` | Upload and extracted ZIP limit |
+| `UPLOAD_CHUNK_MB` | `8` | Maximum browser upload request size in whole MiB; lower it for slower or less reliable proxies |
 | `COOKIE_SECURE` | `true` | Restrict cookies to HTTPS |
 | `AVAILABLE_BACKENDS` | probe | Development/test backend override |
 
 The container starts as root only long enough to create and own its workspace subdirectory, then
 drops to UID/GID `10001`. Preserve `/workspace/blendrender`; container disk is suitable only for
-temporary files and archive responses.
+temporary files and archive responses. A project ZIP is staged and then extracted on the network
+volume, so a worst-case 20 GiB compressed project plus 20 GiB extracted project requires at least
+41 GiB free before upload headroom. The dashboard resumes interrupted uploads for 24 hours.
 
 ## Health and verification
 

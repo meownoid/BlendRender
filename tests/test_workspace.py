@@ -2,11 +2,23 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import time
+from datetime import UTC, datetime, timedelta
 
+import blendrender.workspace as workspace_module
+import pytest
 from blendrender.config import Settings
-from blendrender.models import Backend, FrameResult, JobManifest, JobStatus, SceneManifest, utc_now
-from blendrender.workspace import WorkspaceStore
+from blendrender.models import (
+    Backend,
+    FrameResult,
+    JobManifest,
+    JobStatus,
+    SceneManifest,
+    UploadManifest,
+    utc_now,
+)
+from blendrender.workspace import UPLOAD_CAPACITY_HEADROOM_BYTES, WorkspaceError, WorkspaceStore
 from PIL import Image
 
 
@@ -19,6 +31,7 @@ def other_settings(settings: Settings) -> Settings:
         renderer_script=settings.renderer_script,
         frontend_dist=settings.frontend_dist,
         max_upload_bytes=settings.max_upload_bytes,
+        upload_chunk_bytes=settings.upload_chunk_bytes,
         cookie_secure=settings.cookie_secure,
         session_ttl_seconds=settings.session_ttl_seconds,
         cancel_grace_seconds=settings.cancel_grace_seconds,
@@ -43,6 +56,21 @@ def create_scene(store: WorkspaceStore, identifier: str) -> None:
     )
 
 
+def create_upload(store: WorkspaceStore, identifier: str, size_bytes: int = 5) -> None:
+    now = datetime.now(UTC)
+    store.create_upload(
+        UploadManifest(
+            id=identifier,
+            filename="project.blend",
+            name="project.blend",
+            size_bytes=size_bytes,
+            created_at=now.isoformat(),
+            updated_at=now.isoformat(),
+            expires_at=(now + timedelta(hours=24)).isoformat(),
+        )
+    )
+
+
 def test_legacy_scene_manifest_uses_filename_as_name(settings) -> None:
     store = WorkspaceStore(settings)
     store.initialize()
@@ -54,6 +82,39 @@ def test_legacy_scene_manifest_uses_filename_as_name(settings) -> None:
     manifest_path.write_text(json.dumps(manifest))
 
     assert store.get_scene(scene_id).name == "input.blend"
+
+
+def test_expired_upload_staging_is_removed(settings) -> None:
+    store = WorkspaceStore(settings)
+    store.initialize()
+    upload_id = "00000000-0000-4000-8000-000000000205"
+    create_upload(store, upload_id)
+    manifest_path = store.upload_paths(upload_id)["manifest"]
+    payload = json.loads(manifest_path.read_text())
+    expired = datetime.now(UTC) - timedelta(hours=25)
+    payload["updated_at"] = expired.isoformat()
+    payload["expires_at"] = expired.isoformat()
+    manifest_path.write_text(json.dumps(payload))
+
+    store.cleanup_expired_uploads()
+
+    assert not store.upload_paths(upload_id)["root"].exists()
+
+
+def test_open_uploads_reserve_their_remaining_capacity(settings, monkeypatch) -> None:
+    store = WorkspaceStore(settings)
+    store.initialize()
+    free = UPLOAD_CAPACITY_HEADROOM_BYTES + 150
+    usage_type = type(shutil.disk_usage(settings.workspace_root))
+    monkeypatch.setattr(
+        workspace_module.shutil,
+        "disk_usage",
+        lambda _: usage_type(free + 1, 1, free),
+    )
+    create_upload(store, "00000000-0000-4000-8000-000000000206", size_bytes=100)
+
+    with pytest.raises(WorkspaceError, match="Insufficient disk space"):
+        create_upload(store, "00000000-0000-4000-8000-000000000207", size_bytes=100)
 
 
 def test_two_pods_share_scenes_but_claim_only_their_own_jobs(settings) -> None:

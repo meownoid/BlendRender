@@ -29,9 +29,11 @@ read its contents.
   data, and camera/microphone/geolocation access.
 - Uploaded paths are derived from generated UUIDs. Scene display names and original filenames are
   reduced to a printable base name and are used only as metadata/download naming.
-- Uploads are streamed and size-limited. Project ZIPs are limited by both compressed upload and
-  extracted regular-file size, then extracted only after rejecting encrypted, special, duplicate,
-  absolute, and traversal entries. Archive selections must refer to available frames.
+- Upload chunks are streamed directly to UUID-derived staging paths on the shared volume and are
+  size-limited, ordered, and durably checkpointed. Inactive staging data expires after 24 hours.
+  Project ZIPs are limited by both compressed upload and extracted regular-file size and 100,000
+  entries, then extracted only after rejecting encrypted, special, duplicate, absolute, and
+  traversal entries. Archive selections must refer to available frames.
 
 These controls do not provide per-user identity, revocation, audit history, network rate limiting,
 or authorization boundaries between jobs.

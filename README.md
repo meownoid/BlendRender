@@ -2,8 +2,10 @@
 
 BlendRender is a shared-workspace Blender renderer for RunPod Pods. Upload a `.blend` file or a
 self-contained project ZIP once as a **scene**, then create independent render **jobs** from that
-scene on any connected Pod. Each Pod renders only the jobs created through its dashboard, while all
-Pods display the same scenes and every published result variant.
+scene on any connected Pod. The dashboard transfers projects in resumable chunks (8 MiB by default), so a lost
+proxy connection or page reload can continue an in-progress upload. Each Pod renders only the jobs
+created through its dashboard, while all Pods display the same scenes and every published result
+variant.
 
 Results are immutable scene assets. Rendering the same scene/frame on multiple Pods preserves every
 PNG/WebP variant along with backend, hardware, samples, pod, and render-duration metadata.

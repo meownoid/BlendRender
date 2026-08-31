@@ -24,6 +24,7 @@ def settings(tmp_path: Path) -> Settings:
         renderer_script=tmp_path / "render.py",
         frontend_dist=tmp_path / "dist",
         max_upload_bytes=1024 * 1024,
+        upload_chunk_bytes=8 * 1024 * 1024,
         cookie_secure=False,
         session_ttl_seconds=3600,
         cancel_grace_seconds=0.1,

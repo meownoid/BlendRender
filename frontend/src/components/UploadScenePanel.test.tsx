@@ -45,3 +45,48 @@ test('submits a file dropped onto the upload area', async () => {
 
   await waitFor(() => expect(onUpload).toHaveBeenCalledWith(file, ''))
 })
+
+test('allows cancelling an in-progress chunk upload but not finalization', () => {
+  const onCancel = vi.fn()
+  const { rerender } = render(
+    <UploadScenePanel
+      open
+      busy
+      progress={{ loaded: 4, total: 10, phase: 'uploading' }}
+      onClose={vi.fn()}
+      onCancel={onCancel}
+      onUpload={vi.fn()}
+    />,
+  )
+
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel upload' }))
+  expect(onCancel).toHaveBeenCalledOnce()
+
+  rerender(
+    <UploadScenePanel
+      open
+      busy
+      progress={{ loaded: 10, total: 10, phase: 'finalizing' }}
+      onClose={vi.fn()}
+      onCancel={onCancel}
+      onUpload={vi.fn()}
+    />,
+  )
+  expect(screen.queryByRole('button', { name: 'Cancel upload' })).toBeNull()
+  expect(screen.getByText('Validating and unpacking…')).toBeInTheDocument()
+})
+
+test('shows transferred and total bytes beside upload progress', () => {
+  render(
+    <UploadScenePanel
+      open
+      busy
+      progress={{ loaded: 4 * 1024 ** 2, total: 10 * 1024 ** 2, phase: 'uploading' }}
+      onClose={vi.fn()}
+      onUpload={vi.fn()}
+    />,
+  )
+
+  expect(screen.getByText('Uploading 40%')).toBeInTheDocument()
+  expect(screen.getByText('4.0 MB / 10 MB')).toBeInTheDocument()
+})

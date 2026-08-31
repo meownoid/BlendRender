@@ -5,7 +5,14 @@ install:
     cd frontend && npm ci
 
 dev-backend:
-    APP_PASSWORD=${APP_PASSWORD:-blendrender-dev} COOKIE_SECURE=false BLENDER_BIN=${BLENDER_BIN:-blender} AVAILABLE_BACKENDS=CPU BLENDRENDER_POD_ID=local WORKSPACE_ROOT=./workspace uv run uvicorn blendrender.main:app --reload --port 8000
+    APP_PASSWORD=${APP_PASSWORD:-password} \
+    COOKIE_SECURE=false \
+    BLENDER_BIN=${BLENDER_BIN:-blender} \
+    AVAILABLE_BACKENDS=CPU \
+    BLENDRENDER_POD_ID=local \
+    WORKSPACE_ROOT=${WORKSPACE_ROOT:-/tmp/workspace/} \
+    UPLOAD_CHUNK_MB=${UPLOAD_CHUNK_MB:-32} \
+    uv run uvicorn blendrender.main:app --reload --port 8000
 
 dev-frontend:
     cd frontend && npm run dev

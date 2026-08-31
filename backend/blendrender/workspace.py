@@ -31,13 +31,23 @@ from .models import (
     SceneManifest,
     TelemetrySample,
     TelemetrySnapshot,
+    UploadManifest,
+    UploadStatus,
     WorkspaceManifest,
     utc_now,
+)
+from .project_archive import (
+    ProjectArchiveCapacityError,
+    ProjectArchiveError,
+    extract_project_archive,
+    inspect_project_archive,
 )
 
 T = TypeVar("T", bound=BaseModel)
 NODE_ONLINE_FOR = timedelta(seconds=30)
 LOCK_STALE_AFTER_SECONDS = 300
+UPLOAD_TTL = timedelta(hours=24)
+UPLOAD_CAPACITY_HEADROOM_BYTES = 1024**3
 
 
 class WorkspaceError(RuntimeError):
@@ -70,6 +80,7 @@ class WorkspaceStore:
             self.settings.nodes_root,
             root / "staging",
             root / "locks" / "scenes",
+            root / "locks" / "uploads",
             root / "tombstones" / "scenes",
             root / "trash",
         ):
@@ -88,6 +99,214 @@ class WorkspaceStore:
 
     def staging_path(self, identifier: str) -> Path:
         return self.settings.workspace_root / "staging" / identifier
+
+    def upload_paths(self, upload_id: str, *, completed: bool = False) -> dict[str, Path]:
+        _require_uuid(upload_id, "Upload")
+        root = self.scene_paths(upload_id)["root"] if completed else self.staging_path(upload_id)
+        return {
+            "root": root,
+            "manifest": root / "upload.json",
+            "part": root / "upload.part",
+            "source": root / "source",
+        }
+
+    def create_upload(self, upload: UploadManifest) -> UploadManifest:
+        if upload.size_bytes > self.settings.max_upload_bytes:
+            raise WorkspaceError("Upload exceeds the configured limit")
+        with self.upload_admission_lock():
+            self.cleanup_expired_uploads()
+            available = shutil.disk_usage(self.settings.workspace_root).free
+            reserved = self._reserved_upload_bytes()
+            if available - reserved < upload.size_bytes + UPLOAD_CAPACITY_HEADROOM_BYTES:
+                raise WorkspaceError("Insufficient disk space for the requested upload")
+            paths = self.upload_paths(upload.id)
+            try:
+                paths["root"].mkdir(parents=True)
+                _atomic_write_model(paths["manifest"], upload, create_only=True)
+            except FileExistsError as exc:
+                raise ConflictError("Upload already exists") from exc
+        return upload
+
+    def get_upload(self, upload_id: str) -> UploadManifest:
+        paths = self.upload_paths(upload_id)
+        if paths["manifest"].is_file():
+            return _read_model_required(paths["manifest"], UploadManifest, "Upload")
+        completed_paths = self.upload_paths(upload_id, completed=True)
+        return _read_model_required(completed_paths["manifest"], UploadManifest, "Upload")
+
+    def list_recoverable_uploads(self) -> list[str]:
+        uploads: list[str] = []
+        for root in _directory_children(self.settings.workspace_root / "staging"):
+            try:
+                upload = _read_model_required(root / "upload.json", UploadManifest, "Upload")
+            except (WorkspaceError, ValidationError, OSError):
+                continue
+            if upload.status in {UploadStatus.FINALIZING, UploadStatus.COMPLETED}:
+                uploads.append(upload.id)
+        return uploads
+
+    def cleanup_expired_uploads(self) -> None:
+        cutoff = datetime.now(UTC) - UPLOAD_TTL
+        for root in _directory_children(self.settings.workspace_root / "staging"):
+            try:
+                upload = _read_model_required(root / "upload.json", UploadManifest, "Upload")
+                updated_at = datetime.fromisoformat(upload.updated_at).astimezone(UTC)
+            except (WorkspaceError, ValidationError, OSError, ValueError):
+                continue
+            if updated_at > cutoff:
+                continue
+            try:
+                with self.upload_lock(upload.id):
+                    if root.exists():
+                        shutil.rmtree(root)
+            except ConflictError:
+                continue
+
+    def delete_upload(self, upload_id: str) -> None:
+        with self.upload_lock(upload_id):
+            paths = self.upload_paths(upload_id)
+            upload = _read_model_required(paths["manifest"], UploadManifest, "Upload")
+            if upload.status == UploadStatus.FINALIZING:
+                raise ConflictError("The upload is being finalized")
+            if upload.status == UploadStatus.COMPLETED:
+                raise ConflictError("The upload has already created a scene")
+            shutil.rmtree(paths["root"])
+
+    def update_upload(self, upload_id: str, **values: Any) -> UploadManifest:
+        paths = self.upload_paths(upload_id)
+        upload = _read_model_required(paths["manifest"], UploadManifest, "Upload")
+        now = datetime.now(UTC)
+        updated = UploadManifest.model_validate(
+            {
+                **upload.model_dump(),
+                **values,
+                "updated_at": now.isoformat(),
+                "expires_at": (now + UPLOAD_TTL).isoformat(),
+            }
+        )
+        _atomic_write_model(paths["manifest"], updated)
+        return updated
+
+    def mark_upload_failed(self, upload_id: str, error: str) -> UploadManifest:
+        with self.upload_lock(upload_id):
+            return self.update_upload(upload_id, status=UploadStatus.FAILED, error=error)
+
+    def prepare_upload_finalization(self, upload_id: str) -> tuple[UploadManifest, bool]:
+        with self.upload_lock(upload_id):
+            upload = self.get_upload(upload_id)
+            if upload.status == UploadStatus.COMPLETED:
+                return upload, False
+            if upload.uploaded_bytes != upload.size_bytes:
+                raise WorkspaceError("The upload is incomplete")
+            if upload.status not in {
+                UploadStatus.UPLOADING,
+                UploadStatus.FAILED,
+                UploadStatus.FINALIZING,
+            }:
+                raise ConflictError("The upload cannot be finalized")
+            should_start = upload.status != UploadStatus.FINALIZING
+            if should_start:
+                upload = self.update_upload(upload_id, status=UploadStatus.FINALIZING, error=None)
+            return upload, should_start
+
+    def finalize_upload(self, upload_id: str) -> UploadManifest:
+        with self.upload_lock(upload_id) as lock:
+            upload = self.get_upload(upload_id)
+            if upload.status == UploadStatus.COMPLETED:
+                return self._publish_completed_upload(upload, self.upload_paths(upload_id))
+            if upload.status != UploadStatus.FINALIZING:
+                raise ConflictError("The upload is not ready to be finalized")
+            paths = self.upload_paths(upload_id)
+            source = paths["source"]
+            part = paths["part"]
+            if not part.is_file() and not source.is_dir():
+                raise WorkspaceError("The uploaded file is unavailable")
+
+            def heartbeat() -> None:
+                os.utime(lock)
+
+            if source.is_dir() and not part.exists():
+                if upload.source_kind is None or upload.entrypoint is None:
+                    raise WorkspaceError("The upload source is incomplete")
+            else:
+                shutil.rmtree(source, ignore_errors=True)
+                suffix = Path(upload.filename).suffix.lower()
+                if suffix == ".blend":
+                    source.mkdir()
+                    os.replace(part, source / "input.blend")
+                    upload = self.update_upload(
+                        upload_id,
+                        source_kind="blend",
+                        entrypoint="input.blend",
+                    )
+                elif suffix == ".zip":
+                    manifest = inspect_project_archive(
+                        part,
+                        source,
+                        self.settings.max_upload_bytes,
+                        heartbeat,
+                    )
+                    if (
+                        shutil.disk_usage(self.settings.workspace_root).free
+                        < manifest.total_size + UPLOAD_CAPACITY_HEADROOM_BYTES
+                    ):
+                        raise ProjectArchiveCapacityError(
+                            "Insufficient disk space to extract the uploaded ZIP archive"
+                        )
+                    extract_project_archive(
+                        part,
+                        source,
+                        manifest,
+                        self.settings.max_upload_bytes,
+                        heartbeat,
+                    )
+                    part.unlink()
+                    upload = self.update_upload(
+                        upload_id,
+                        source_kind="zip",
+                        entrypoint=manifest.scene_relative_path.as_posix(),
+                    )
+                else:
+                    raise ProjectArchiveError(
+                        "Only .blend files and project ZIP archives are accepted"
+                    )
+
+            if upload.source_kind is None or upload.entrypoint is None:
+                raise WorkspaceError("The upload source is incomplete")
+            completed = self.update_upload(upload_id, status=UploadStatus.COMPLETED, error=None)
+            return self._publish_completed_upload(completed, paths)
+
+    def _publish_completed_upload(
+        self, upload: UploadManifest, paths: dict[str, Path]
+    ) -> UploadManifest:
+        if upload.source_kind is None or upload.entrypoint is None:
+            raise WorkspaceError("The upload source is incomplete")
+        scene = SceneManifest(
+            id=upload.id,
+            filename=Path(upload.entrypoint).name,
+            name=upload.name,
+            source_kind=upload.source_kind,
+            entrypoint=upload.entrypoint,
+            created_at=upload.created_at,
+            size_bytes=upload.size_bytes,
+        )
+        try:
+            self.create_scene(scene, paths["root"])
+        except ConflictError:
+            if not self.scene_paths(upload.id)["root"].is_dir():
+                raise
+        return upload
+
+    def _reserved_upload_bytes(self) -> int:
+        reserved = 0
+        for root in _directory_children(self.settings.workspace_root / "staging"):
+            try:
+                upload = _read_model_required(root / "upload.json", UploadManifest, "Upload")
+            except (WorkspaceError, ValidationError, OSError):
+                continue
+            if upload.status == UploadStatus.UPLOADING:
+                reserved += upload.size_bytes - upload.uploaded_bytes
+        return reserved
 
     def scene_paths(self, scene_id: str) -> dict[str, Path]:
         _require_uuid(scene_id, "Scene")
@@ -275,9 +494,20 @@ class WorkspaceStore:
         return self.settings.workspace_root / "tombstones" / "scenes" / f"{scene_id}.json"
 
     @contextmanager
-    def scene_lock(self, scene_id: str) -> Iterator[None]:
-        _require_uuid(scene_id, "Scene")
-        path = self.settings.workspace_root / "locks" / "scenes" / scene_id
+    def upload_lock(self, upload_id: str) -> Iterator[Path]:
+        _require_uuid(upload_id, "Upload")
+        path = self.settings.workspace_root / "locks" / "uploads" / upload_id
+        with self._directory_lock(path, "Upload is busy"):
+            yield path
+
+    @contextmanager
+    def upload_admission_lock(self) -> Iterator[None]:
+        path = self.settings.workspace_root / "locks" / "uploads" / "admission"
+        with self._directory_lock(path, "Another upload is being prepared"):
+            yield
+
+    @contextmanager
+    def _directory_lock(self, path: Path, conflict_message: str) -> Iterator[None]:
         for _ in range(100):
             try:
                 path.mkdir()
@@ -292,12 +522,19 @@ class WorkspaceStore:
                     continue
                 time.sleep(0.05)
         else:
-            raise ConflictError("Scene is busy")
+            raise ConflictError(conflict_message)
         try:
             yield
         finally:
             with suppress(FileNotFoundError):
                 path.rmdir()
+
+    @contextmanager
+    def scene_lock(self, scene_id: str) -> Iterator[None]:
+        _require_uuid(scene_id, "Scene")
+        path = self.settings.workspace_root / "locks" / "scenes" / scene_id
+        with self._directory_lock(path, "Scene is busy"):
+            yield
 
     def result_paths(self, scene_id: str, frame: int, result_id: str) -> dict[str, Path]:
         _require_uuid(scene_id, "Scene")

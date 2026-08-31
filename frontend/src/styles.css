@@ -161,10 +161,11 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .field input { width: 100%; height: 42px; padding: 0 13px; border: 1px solid var(--line); border-radius: 5px; color: var(--text); background: #15191e; font-size: 14px; }
 .render-panel__error { min-height: 48px; padding-top: 12px; color: #ff8179; font-size: 12px; }
 .render-panel__submit { width: 100%; }
-.upload-progress { margin-top: 18px; }
-.upload-progress__labels { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; font-size: 12px; }
-.upload-progress__labels strong { color: var(--accent); font-weight: 620; }
-.upload-progress__labels span { color: var(--muted); white-space: nowrap; }
+.upload-progress { display: grid; gap: 8px; margin-top: 18px; }
+.upload-progress .button--subtle { justify-self: start; margin-top: 4px; }
+.upload-progress__labels { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.upload-progress__labels strong { color: var(--text); font-size: 16px; font-weight: 620; }
+.upload-progress__labels span { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .upload-progress__track { height: 7px; overflow: hidden; border-radius: 99px; background: #30363c; }
 .upload-progress__track span { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #ff971f, #ff8920); transition: width .2s ease; }
 .upload-progress--indeterminate .upload-progress__track span { width: 34%; animation: upload-indeterminate 1.2s ease-in-out infinite; }

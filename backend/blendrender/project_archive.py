@@ -3,11 +3,13 @@ from __future__ import annotations
 import errno
 import stat
 import zipfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 ARCHIVE_COPY_CHUNK_BYTES = 8 * 1024 * 1024
-MAX_ARCHIVE_MEMBERS = 10_000
+MAX_ARCHIVE_MEMBERS = 100_000
+ArchiveHeartbeat = Callable[[], None]
 
 
 class ProjectArchiveError(ValueError):
@@ -42,6 +44,7 @@ def inspect_project_archive(
     archive_path: Path,
     source_root: Path,
     max_size: int,
+    heartbeat: ArchiveHeartbeat | None = None,
 ) -> ProjectArchiveManifest:
     """Validate a ZIP and return the extraction plan without writing any project files."""
     root = source_root.resolve()
@@ -58,7 +61,9 @@ def inspect_project_archive(
     targets: dict[Path, ArchiveEntry] = {}
     scenes: list[Path] = []
     total_size = 0
-    for info in infos:
+    for index, info in enumerate(infos, start=1):
+        if heartbeat is not None and index % 100 == 0:
+            heartbeat()
         entry = _archive_entry(info, root)
         if entry.target in targets:
             raise ProjectArchiveError("ZIP archive contains duplicate paths")
@@ -82,6 +87,7 @@ def extract_project_archive(
     source_root: Path,
     manifest: ProjectArchiveManifest,
     max_size: int,
+    heartbeat: ArchiveHeartbeat | None = None,
 ) -> None:
     """Extract a previously validated manifest, checking actual decompressed bytes as it copies."""
     copied_total = 0
@@ -89,6 +95,8 @@ def extract_project_archive(
         source_root.mkdir(parents=True, exist_ok=False)
         with zipfile.ZipFile(archive_path) as bundle:
             for entry in manifest.entries:
+                if heartbeat is not None:
+                    heartbeat()
                 if entry.is_directory:
                     entry.target.mkdir(parents=True, exist_ok=True)
                     continue
@@ -96,6 +104,8 @@ def extract_project_archive(
                 copied_entry = 0
                 with bundle.open(entry.name) as source, entry.target.open("xb") as destination:
                     while chunk := source.read(ARCHIVE_COPY_CHUNK_BYTES):
+                        if heartbeat is not None:
+                            heartbeat()
                         copied_entry += len(chunk)
                         copied_total += len(chunk)
                         if copied_total > max_size:

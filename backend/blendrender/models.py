@@ -18,6 +18,13 @@ class JobStatus(StrEnum):
     INTERRUPTED = "interrupted"
 
 
+class UploadStatus(StrEnum):
+    UPLOADING = "uploading"
+    FINALIZING = "finalizing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class Backend(StrEnum):
     OPTIX = "OPTIX"
     CUDA = "CUDA"
@@ -65,6 +72,35 @@ class SceneManifest(Scene):
     schema_version: Literal[2] = WORKSPACE_SCHEMA_VERSION
     job_count: int = 0
     result_count: int = 0
+
+
+class CreateUploadRequest(BaseModel):
+    filename: str = Field(min_length=1, max_length=512)
+    name: str | None = Field(default=None, max_length=512)
+    size_bytes: int = Field(gt=0)
+
+
+class UploadManifest(BaseModel):
+    """Durable state for an upload while it lives in staging or its completed scene."""
+
+    schema_version: Literal[2] = WORKSPACE_SCHEMA_VERSION
+    id: str
+    filename: str
+    name: str
+    size_bytes: int = Field(gt=0)
+    uploaded_bytes: int = Field(default=0, ge=0)
+    status: UploadStatus = UploadStatus.UPLOADING
+    created_at: str
+    updated_at: str
+    expires_at: str
+    error: str | None = None
+    source_kind: Literal["blend", "zip"] | None = None
+    entrypoint: str | None = None
+
+
+class UploadSession(UploadManifest):
+    chunk_size_bytes: int = Field(gt=0)
+    scene: Scene | None = None
 
 
 class CreateJobRequest(BaseModel):

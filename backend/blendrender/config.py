@@ -14,6 +14,19 @@ def _bool_env(name: str, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _positive_integer_env(name: str, default: int) -> int:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise RuntimeError(f"{name} must be a positive whole number") from exc
+    if parsed <= 0:
+        raise RuntimeError(f"{name} must be a positive whole number")
+    return parsed
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     app_password: str
@@ -23,6 +36,7 @@ class Settings:
     renderer_script: Path
     frontend_dist: Path
     max_upload_bytes: int
+    upload_chunk_bytes: int
     cookie_secure: bool
     session_ttl_seconds: int
     cancel_grace_seconds: float
@@ -53,7 +67,8 @@ class Settings:
             frontend_dist=Path(
                 os.getenv("FRONTEND_DIST", str(project_root / "frontend/dist"))
             ).resolve(),
-            max_upload_bytes=int(float(os.getenv("MAX_UPLOAD_GB", "5")) * 1024**3),
+            max_upload_bytes=int(float(os.getenv("MAX_UPLOAD_GB", "20")) * 1024**3),
+            upload_chunk_bytes=_positive_integer_env("UPLOAD_CHUNK_MB", 8) * 1024**2,
             cookie_secure=_bool_env("COOKIE_SECURE", True),
             session_ttl_seconds=int(os.getenv("SESSION_TTL_SECONDS", str(7 * 24 * 3600))),
             cancel_grace_seconds=float(os.getenv("CANCEL_GRACE_SECONDS", "8")),

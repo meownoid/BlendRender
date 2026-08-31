@@ -1,5 +1,6 @@
 export type Backend = 'OPTIX' | 'CUDA' | 'CPU'
 export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'canceled' | 'interrupted'
+export type UploadStatus = 'uploading' | 'finalizing' | 'completed' | 'failed'
 
 export interface Scene {
   id: string
@@ -111,4 +112,20 @@ export interface CreateJobForm {
 export interface UploadProgress {
   loaded: number
   total: number | null
+  phase: 'uploading' | 'retrying' | 'finalizing'
+}
+
+export interface UploadSession {
+  id: string
+  filename: string
+  name: string
+  size_bytes: number
+  uploaded_bytes: number
+  status: UploadStatus
+  created_at: string
+  updated_at: string
+  expires_at: string
+  error: string | null
+  chunk_size_bytes: number
+  scene: Scene | null
 }

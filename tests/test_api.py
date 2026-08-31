@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import io
+import time
 import zipfile
+from dataclasses import replace
 
 from blendrender.main import create_app
 from blendrender.models import Backend, FrameResult, JobManifest, SceneManifest, utc_now
@@ -20,13 +22,36 @@ def upload_scene(
     content: bytes = b"blend",
     name: str | None = None,
 ) -> dict:
-    response = client.post(
-        "/api/scenes",
-        files={"file": (filename, content)},
-        data={} if name is None else {"name": name},
+    created = client.post(
+        "/api/uploads",
+        json={"filename": filename, "name": name, "size_bytes": len(content)},
     )
-    assert response.status_code == 201, response.text
-    return response.json()
+    assert created.status_code == 201, created.text
+    upload = created.json()
+    offset = 0
+    while offset < len(content):
+        chunk = content[offset : offset + upload["chunk_size_bytes"]]
+        appended = client.patch(
+            f"/api/uploads/{upload['id']}",
+            content=chunk,
+            headers={
+                "Content-Type": "application/octet-stream",
+                "Upload-Offset": str(offset),
+            },
+        )
+        assert appended.status_code == 200, appended.text
+        offset = appended.json()["uploaded_bytes"]
+    complete = client.post(f"/api/uploads/{upload['id']}/complete")
+    assert complete.status_code == 202, complete.text
+    for _ in range(100):
+        status = client.get(f"/api/uploads/{upload['id']}")
+        assert status.status_code == 200, status.text
+        upload = status.json()
+        if upload["status"] == "completed" and upload["scene"] is not None:
+            return upload["scene"]
+        assert upload["status"] != "failed", upload["error"]
+        time.sleep(0.01)
+    raise AssertionError("upload did not finalize")
 
 
 def test_scene_upload_then_local_job_creation(settings) -> None:
@@ -78,6 +103,121 @@ def test_zip_scene_preserves_entrypoint_and_resources(settings) -> None:
         entrypoint, root = store.scene_entrypoint(scene["id"])
         assert entrypoint == root / "project/main.blend"
         assert (root / "project/textures/a.png").read_bytes() == b"png"
+
+
+def test_upload_chunks_resume_from_the_committed_offset(settings) -> None:
+    app = create_app(settings, start_worker=False)
+    with TestClient(app) as client:
+        login(client)
+        created = client.post(
+            "/api/uploads",
+            json={"filename": "scene.blend", "size_bytes": 5},
+        )
+        assert created.status_code == 201
+        upload = created.json()
+        first = client.patch(
+            f"/api/uploads/{upload['id']}",
+            content=b"bl",
+            headers={"Content-Type": "application/octet-stream", "Upload-Offset": "0"},
+        )
+        assert first.status_code == 200
+        assert first.json()["uploaded_bytes"] == 2
+        stale = client.patch(
+            f"/api/uploads/{upload['id']}",
+            content=b"end",
+            headers={"Content-Type": "application/octet-stream", "Upload-Offset": "0"},
+        )
+        assert stale.status_code == 409
+        assert stale.headers["upload-offset"] == "2"
+        resumed = client.patch(
+            f"/api/uploads/{upload['id']}",
+            content=b"end",
+            headers={"Content-Type": "application/octet-stream", "Upload-Offset": "2"},
+        )
+        assert resumed.status_code == 200
+        assert resumed.json()["uploaded_bytes"] == 5
+
+
+def test_upload_chunk_size_is_configured_and_enforced(settings) -> None:
+    app = create_app(replace(settings, upload_chunk_bytes=2), start_worker=False)
+    with TestClient(app) as client:
+        login(client)
+        created = client.post(
+            "/api/uploads",
+            json={"filename": "scene.blend", "size_bytes": 5},
+        )
+        assert created.status_code == 201
+        upload = created.json()
+        assert upload["chunk_size_bytes"] == 2
+        rejected = client.patch(
+            f"/api/uploads/{upload['id']}",
+            content=b"abc",
+            headers={"Content-Type": "application/octet-stream", "Upload-Offset": "0"},
+        )
+        assert rejected.status_code == 413
+
+
+def test_upload_rejects_incomplete_finalization_and_can_be_deleted(settings) -> None:
+    app = create_app(settings, start_worker=False)
+    with TestClient(app) as client:
+        login(client)
+        created = client.post(
+            "/api/uploads",
+            json={"filename": "scene.blend", "size_bytes": 5},
+        )
+        upload_id = created.json()["id"]
+        incomplete = client.post(f"/api/uploads/{upload_id}/complete")
+        assert incomplete.status_code == 422
+        assert client.delete(f"/api/uploads/{upload_id}").status_code == 204
+        assert client.get(f"/api/uploads/{upload_id}").status_code == 404
+
+
+def test_upload_session_persists_across_an_application_restart(settings) -> None:
+    first = create_app(settings, start_worker=False)
+    with TestClient(first) as client:
+        login(client)
+        created = client.post(
+            "/api/uploads",
+            json={"filename": "scene.blend", "size_bytes": 5},
+        ).json()
+        upload_id = created["id"]
+        assert client.patch(
+            f"/api/uploads/{upload_id}",
+            content=b"bl",
+            headers={"Content-Type": "application/octet-stream", "Upload-Offset": "0"},
+        ).status_code == 200
+
+    restarted = create_app(settings, start_worker=False)
+    with TestClient(restarted) as client:
+        login(client)
+        status = client.get(f"/api/uploads/{upload_id}")
+        assert status.status_code == 200
+        assert status.json()["uploaded_bytes"] == 2
+
+
+def test_invalid_project_archive_remains_a_failed_upload(settings) -> None:
+    app = create_app(settings, start_worker=False)
+    with TestClient(app) as client:
+        login(client)
+        created = client.post(
+            "/api/uploads",
+            json={"filename": "project.zip", "size_bytes": 7},
+        ).json()
+        assert client.patch(
+            f"/api/uploads/{created['id']}",
+            content=b"not-zip",
+            headers={"Content-Type": "application/octet-stream", "Upload-Offset": "0"},
+        ).status_code == 200
+        assert client.post(f"/api/uploads/{created['id']}/complete").status_code == 202
+        for _ in range(100):
+            upload = client.get(f"/api/uploads/{created['id']}").json()
+            if upload["status"] == "failed":
+                assert "invalid" in upload["error"].lower()
+                break
+            time.sleep(0.01)
+        else:
+            raise AssertionError("invalid archive did not fail")
+        assert client.get("/api/scenes").json() == []
 
 
 def test_foreign_job_is_read_only_and_results_are_grouped(settings, tmp_path) -> None:

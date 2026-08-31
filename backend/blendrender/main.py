@@ -2,26 +2,27 @@ from __future__ import annotations
 
 import asyncio
 import os
-import shutil
 import tempfile
 import unicodedata
 import uuid
 import zipfile
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Literal
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
+from starlette.requests import ClientDisconnect
 
 from .auth import SessionManager
 from .config import Settings
 from .models import (
     ArchiveRequest,
     CreateJobRequest,
+    CreateUploadRequest,
     FrameResult,
     FramesPage,
     Job,
@@ -29,22 +30,25 @@ from .models import (
     JobStatus,
     LoginRequest,
     Scene,
-    SceneManifest,
     SessionResponse,
     SystemInfo,
     TelemetrySample,
+    UploadManifest,
+    UploadSession,
+    UploadStatus,
     utc_now,
 )
-from .project_archive import (
-    ProjectArchiveCapacityError,
-    ProjectArchiveError,
-    extract_project_archive,
-    inspect_project_archive,
-)
+from .project_archive import ProjectArchiveError
 from .system import SystemProbe
 from .telemetry import TelemetryCollector
 from .worker import RenderWorker
-from .workspace import ConflictError, NotFoundError, WorkspaceError, WorkspaceStore
+from .workspace import (
+    UPLOAD_TTL,
+    ConflictError,
+    NotFoundError,
+    WorkspaceError,
+    WorkspaceStore,
+)
 
 
 def create_app(settings: Settings | None = None, *, start_worker: bool = True) -> FastAPI:
@@ -63,10 +67,31 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
     )
     worker = RenderWorker(resolved, store)
     telemetry = TelemetryCollector(store, probe)
+    finalization_tasks: set[asyncio.Task[None]] = set()
+
+    async def finalize_upload(upload_id: str) -> None:
+        try:
+            await asyncio.to_thread(store.finalize_upload, upload_id)
+        except ProjectArchiveError as exc:
+            await _mark_upload_failed(store, upload_id, str(exc))
+        except (ConflictError, NotFoundError):
+            return
+        except (OSError, WorkspaceError):
+            await _mark_upload_failed(
+                store,
+                upload_id,
+                "The uploaded project could not be finalized. Try again after checking disk space.",
+            )
+
+    def schedule_finalization(upload_id: str) -> None:
+        task = asyncio.create_task(finalize_upload(upload_id))
+        finalization_tasks.add(task)
+        task.add_done_callback(finalization_tasks.discard)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await asyncio.to_thread(store.initialize)
+        await asyncio.to_thread(store.cleanup_expired_uploads)
         await probe.initialize()
         await telemetry.start()
         if start_worker:
@@ -77,7 +102,11 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
         app.state.probe = probe
         app.state.telemetry = telemetry
         app.state.worker = worker
+        for upload_id in await asyncio.to_thread(store.list_recoverable_uploads):
+            schedule_finalization(upload_id)
         yield
+        if finalization_tasks:
+            await asyncio.gather(*finalization_tasks, return_exceptions=True)
         if start_worker:
             await worker.stop()
         await telemetry.stop()
@@ -141,73 +170,155 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
     async def system_telemetry(_: None = Depends(require_auth)) -> list[TelemetrySample]:
         return await telemetry.samples()
 
-    @app.post("/api/scenes", response_model=Scene, status_code=201)
-    async def create_scene(
-        file: Annotated[UploadFile, File()],
-        name: Annotated[str | None, Form()] = None,
-        _: None = Depends(require_auth),
-    ) -> Scene:
-        original_name = _sanitize_scene_name(file.filename or "")
-        suffix = Path(original_name).suffix.lower()
-        if suffix not in {".blend", ".zip"}:
+    @app.post("/api/uploads", response_model=UploadSession, status_code=201)
+    async def create_upload(
+        payload: CreateUploadRequest, _: None = Depends(require_auth)
+    ) -> UploadSession:
+        filename = _sanitize_scene_name(payload.filename)
+        if Path(filename).suffix.lower() not in {".blend", ".zip"}:
             raise HTTPException(
                 status_code=422, detail="Only .blend files and project ZIP archives are accepted"
             )
-        if shutil.disk_usage(resolved.workspace_root).free < 1024**3:
-            raise HTTPException(status_code=507, detail="Less than 1 GB of disk space remains")
-        scene_id = str(uuid.uuid4())
-        staged = store.staging_path(scene_id)
-        staged.mkdir(parents=True)
-        size = 0
+        if payload.size_bytes > resolved.max_upload_bytes:
+            raise HTTPException(status_code=413, detail="Upload exceeds the configured limit")
+        now = datetime.now(UTC)
+        upload = UploadManifest(
+            id=str(uuid.uuid4()),
+            filename=filename,
+            name=_sanitize_scene_name(payload.name or "") or filename,
+            size_bytes=payload.size_bytes,
+            created_at=now.isoformat(),
+            updated_at=now.isoformat(),
+            expires_at=(now + UPLOAD_TTL).isoformat(),
+        )
         try:
-            source = staged / "source"
-            if suffix == ".blend":
-                source.mkdir()
-                destination = source / "input.blend"
-                entrypoint = "input.blend"
-                source_kind: Literal["blend", "zip"] = "blend"
-                with destination.open("xb") as destination_file:
-                    size = await _copy_upload(file, destination_file, resolved.max_upload_bytes)
-            else:
-                upload = staged / "upload.zip"
-                with upload.open("xb") as destination_file:
-                    size = await _copy_upload(file, destination_file, resolved.max_upload_bytes)
-                manifest = await asyncio.to_thread(
-                    inspect_project_archive, upload, source, resolved.max_upload_bytes
-                )
-                if shutil.disk_usage(resolved.workspace_root).free < manifest.total_size + 1024**3:
-                    raise HTTPException(
-                        status_code=507,
-                        detail="Insufficient disk space to extract the uploaded ZIP archive",
-                    )
-                try:
-                    await asyncio.to_thread(
-                        extract_project_archive, upload, source, manifest, resolved.max_upload_bytes
-                    )
-                except ProjectArchiveCapacityError as exc:
-                    raise HTTPException(status_code=507, detail=str(exc)) from exc
-                entrypoint = manifest.scene_relative_path.as_posix()
-                source_kind = "zip"
-                upload.unlink()
-            if size == 0:
-                raise HTTPException(status_code=422, detail="The uploaded project file is empty")
-            scene = SceneManifest(
-                id=scene_id,
-                filename=Path(entrypoint).name,
-                name=_sanitize_scene_name(name or "") or original_name,
-                source_kind=source_kind,
-                entrypoint=entrypoint,
-                created_at=utc_now(),
-                size_bytes=size,
+            created = await asyncio.to_thread(store.create_upload, upload)
+        except ConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except WorkspaceError as exc:
+            raise HTTPException(status_code=507, detail=str(exc)) from exc
+        return await _upload_session(store, created, resolved.upload_chunk_bytes)
+
+    @app.get("/api/uploads/{upload_id}", response_model=UploadSession)
+    async def get_upload(upload_id: str, _: None = Depends(require_auth)) -> UploadSession:
+        try:
+            upload = await asyncio.to_thread(store.get_upload, upload_id)
+        except (NotFoundError, WorkspaceError) as exc:
+            raise HTTPException(status_code=404, detail="Upload not found") from exc
+        return await _upload_session(store, upload, resolved.upload_chunk_bytes)
+
+    @app.patch("/api/uploads/{upload_id}", response_model=UploadSession)
+    async def append_upload(
+        upload_id: str, request: Request, _: None = Depends(require_auth)
+    ) -> UploadSession:
+        if request.headers.get("content-type", "").split(";", 1)[0] != "application/octet-stream":
+            raise HTTPException(status_code=415, detail="Upload chunks must be binary data")
+        try:
+            offset = int(request.headers["upload-offset"])
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(
+                status_code=422, detail="Upload-Offset must be a non-negative integer"
+            ) from exc
+        if offset < 0:
+            raise HTTPException(
+                status_code=422, detail="Upload-Offset must be a non-negative integer"
             )
-            return await asyncio.to_thread(store.create_scene, scene, staged)
-        except ProjectArchiveError as exc:
+        try:
+            declared_length = int(request.headers.get("content-length", "0"))
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422, detail="Content-Length must be an integer"
+            ) from exc
+        if declared_length <= 0:
+            raise HTTPException(status_code=422, detail="Upload chunks must not be empty")
+
+        try:
+            with store.upload_lock(upload_id):
+                upload = store.get_upload(upload_id)
+                if upload.status != UploadStatus.UPLOADING:
+                    raise HTTPException(
+                        status_code=409, detail="This upload is not accepting chunks"
+                    )
+                if offset != upload.uploaded_bytes:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Upload offset does not match the committed bytes",
+                        headers={"Upload-Offset": str(upload.uploaded_bytes)},
+                    )
+                remaining_bytes = upload.size_bytes - upload.uploaded_bytes
+                allowed = min(resolved.upload_chunk_bytes, remaining_bytes)
+                if declared_length > allowed:
+                    raise HTTPException(
+                        status_code=413, detail="Upload chunk exceeds the allowed size"
+                    )
+                paths = store.upload_paths(upload_id)
+                written = 0
+                try:
+                    with paths["part"].open("ab") as destination:
+                        async for chunk in request.stream():
+                            if not chunk:
+                                continue
+                            written += len(chunk)
+                            if written > allowed:
+                                raise HTTPException(
+                                    status_code=413, detail="Upload chunk exceeds the allowed size"
+                                )
+                            destination.write(chunk)
+                        destination.flush()
+                        os.fsync(destination.fileno())
+                    if written != declared_length:
+                        raise HTTPException(
+                            status_code=422, detail="Upload chunk length did not match"
+                        )
+                    if written == 0:
+                        raise HTTPException(
+                            status_code=422, detail="Upload chunks must not be empty"
+                        )
+                except (ClientDisconnect, HTTPException, OSError):
+                    if paths["part"].exists():
+                        with paths["part"].open("r+b") as destination:
+                            destination.truncate(offset)
+                    raise
+                updated = store.update_upload(
+                    upload_id,
+                    uploaded_bytes=upload.uploaded_bytes + written,
+                    error=None,
+                )
+        except ClientDisconnect as exc:
+            raise HTTPException(status_code=499, detail="Upload connection closed") from exc
+        except ConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Upload not found") from exc
+        except OSError as exc:
+            raise HTTPException(status_code=507, detail="Unable to store the upload chunk") from exc
+        return await _upload_session(store, updated, resolved.upload_chunk_bytes)
+
+    @app.post("/api/uploads/{upload_id}/complete", response_model=UploadSession, status_code=202)
+    async def complete_upload(upload_id: str, _: None = Depends(require_auth)) -> UploadSession:
+        try:
+            upload, should_start = await asyncio.to_thread(
+                store.prepare_upload_finalization, upload_id
+            )
+        except ConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Upload not found") from exc
+        except WorkspaceError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        except Exception:
-            shutil.rmtree(staged, ignore_errors=True)
-            raise
-        finally:
-            await file.close()
+        if should_start:
+            schedule_finalization(upload_id)
+        return await _upload_session(store, upload, resolved.upload_chunk_bytes)
+
+    @app.delete("/api/uploads/{upload_id}", status_code=204)
+    async def delete_upload(upload_id: str, _: None = Depends(require_auth)) -> Response:
+        try:
+            await asyncio.to_thread(store.delete_upload, upload_id)
+        except ConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except NotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Upload not found") from exc
+        return Response(status_code=204)
 
     @app.get("/api/scenes", response_model=list[Scene])
     async def list_scenes(_: None = Depends(require_auth)) -> list[Scene]:
@@ -414,14 +525,28 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
     return app
 
 
-async def _copy_upload(file: UploadFile, destination, max_bytes: int) -> int:  # type: ignore[no-untyped-def]
-    size = 0
-    while chunk := await file.read(8 * 1024 * 1024):
-        size += len(chunk)
-        if size > max_bytes:
-            raise HTTPException(status_code=413, detail="Upload exceeds the configured limit")
-        destination.write(chunk)
-    return size
+async def _upload_session(
+    store: WorkspaceStore, upload: UploadManifest, chunk_size_bytes: int
+) -> UploadSession:
+    scene: Scene | None = None
+    if upload.status == UploadStatus.COMPLETED:
+        # A finalizer may have written the completion record just before atomic publication.
+        with suppress(NotFoundError, WorkspaceError):
+            scene = await asyncio.to_thread(store.get_scene, upload.id)
+    return UploadSession.model_validate(
+        {
+            **upload.model_dump(),
+            "chunk_size_bytes": chunk_size_bytes,
+            "scene": scene,
+        }
+    )
+
+
+async def _mark_upload_failed(store: WorkspaceStore, upload_id: str, error: str) -> None:
+    try:
+        await asyncio.to_thread(store.mark_upload_failed, upload_id, error)
+    except (ConflictError, NotFoundError, WorkspaceError):
+        return
 
 
 async def _require_scene(store: WorkspaceStore, scene_id: str) -> Scene:

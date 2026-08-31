@@ -9,7 +9,8 @@
 - Make linked library data local. Project ZIPs intentionally allow only one `.blend`, so separate
   library files are rejected.
 - Configure an active camera in the active scene.
-- Uploading creates an immutable scene; choose a frame or range only when creating a later job.
+- Completing a resumable upload creates an immutable scene; choose a frame or range only when
+  creating a later job.
 
 The renderer explicitly detects missing, absolute, and out-of-project unpacked file-backed images,
 libraries, and sounds. Other external dependencies, add-ons, fonts, caches, simulations, or system

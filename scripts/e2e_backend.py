@@ -28,11 +28,13 @@ class Client:
         *,
         body: bytes | None = None,
         content_type: str | None = "application/json",
+        headers: dict[str, str] | None = None,
         expected: int = 200,
     ) -> tuple[bytes, dict[str, str]]:
-        headers = {"Content-Type": content_type} if content_type else {}
+        request_headers = {"Content-Type": content_type} if content_type else {}
+        request_headers.update(headers or {})
         request = urllib.request.Request(
-            f"{self.base_url}{path}", data=body, headers=headers, method=method
+            f"{self.base_url}{path}", data=body, headers=request_headers, method=method
         )
         try:
             with self.opener.open(request, timeout=30) as response:
@@ -63,31 +65,43 @@ class Client:
         return json.loads(raw) if raw else {}
 
 
-def multipart_scene(filename: str, content: bytes) -> tuple[bytes, str]:
-    boundary = "blendrender-e2e-upload-boundary"
-    parts: list[bytes] = []
-    parts.extend(
-        [
-            f"--{boundary}\r\n".encode(),
-            (
-                f'Content-Disposition: form-data; name="file"; '
-                f'filename="{filename}"\r\n'
-            ).encode(),
-            b"Content-Type: application/octet-stream\r\n\r\n",
-            content,
-            b"\r\n",
-            f"--{boundary}--\r\n".encode(),
-        ]
-    )
-    return b"".join(parts), f"multipart/form-data; boundary={boundary}"
-
-
 def project_zip(blend_path: Path) -> bytes:
     payload = BytesIO()
     with zipfile.ZipFile(payload, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
         bundle.writestr(f"project/scenes/{blend_path.name}", blend_path.read_bytes())
         bundle.writestr("project/resources/.keep", b"")
     return payload.getvalue()
+
+
+def upload_scene(client: Client, filename: str, content: bytes, timeout: float) -> dict[str, Any]:
+    upload = client.json(
+        "POST",
+        "/api/uploads",
+        {"filename": filename, "size_bytes": len(content)},
+        expected=201,
+    )
+    offset = 0
+    while offset < len(content):
+        chunk = content[offset : offset + upload["chunk_size_bytes"]]
+        raw, _ = client.request(
+            "PATCH",
+            f"/api/uploads/{upload['id']}",
+            body=chunk,
+            content_type="application/octet-stream",
+            headers={"Upload-Offset": str(offset)},
+        )
+        upload = json.loads(raw)
+        offset = upload["uploaded_bytes"]
+    upload = client.json("POST", f"/api/uploads/{upload['id']}/complete", expected=202)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if upload["status"] == "completed" and upload["scene"] is not None:
+            return upload["scene"]
+        if upload["status"] == "failed":
+            raise RuntimeError(f"upload failed: {upload.get('error')}")
+        time.sleep(0.2)
+        upload = client.json("GET", f"/api/uploads/{upload['id']}")
+    raise RuntimeError(f"upload did not complete within {timeout:.0f}s")
 
 
 def main() -> None:
@@ -107,11 +121,7 @@ def main() -> None:
     system = client.json("GET", "/api/system")
     assert "CPU" in system["available_backends"]
 
-    upload, content_type = multipart_scene("project.zip", project_zip(args.blend))
-    raw, _ = client.request(
-        "POST", "/api/scenes", body=upload, content_type=content_type, expected=201
-    )
-    scene = json.loads(raw)
+    scene = upload_scene(client, "project.zip", project_zip(args.blend), args.timeout)
     scene_id = scene["id"]
     job = client.json(
         "POST",
