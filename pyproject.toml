@@ -1,6 +1,6 @@
 [project]
 name = "blendrender"
-version = "2.0.0"
+version = "2.1.0"
 description = "Self-contained Blender GPU render node for RunPod"
 requires-python = ">=3.12"
 dependencies = [

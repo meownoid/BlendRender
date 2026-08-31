@@ -21,7 +21,7 @@ Build and push the required platform explicitly:
 
 ```bash
 docker buildx build --platform linux/amd64 \
-  -t YOUR_REGISTRY/blendrender:2.0.0 --push .
+  -t YOUR_REGISTRY/blendrender:2.1.0 --push .
 ```
 
 Blender 5.2.1 is published for Linux x64 in this build, so the production target is

@@ -113,7 +113,7 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
 
     app = FastAPI(
         title="BlendRender",
-        version="2.0.0",
+        version="2.1.0",
         docs_url=None,
         redoc_url=None,
         lifespan=lifespan,
