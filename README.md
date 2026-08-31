@@ -28,8 +28,9 @@ The shared catalog defaults to `/workspace/blendrender`. Read [Deployment](docs/
 [Security](docs/security.md) before exposing the service.
 
 To place a scene on the shared volume before starting a Pod, use the
-[RunPod S3 preparation script](docs/deployment.md#preload-a-scene-through-runpods-s3-api). The
-same guide also documents a confirmation-guarded script to clear a network volume.
+[RunPod S3 preparation script](docs/deployment.md#preload-a-scene-through-runpods-s3-api), which
+supports resumable, bounded concurrent file transfers. The same guide also documents a
+confirmation-guarded script to clear a network volume.
 
 ## Local development
 

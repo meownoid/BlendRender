@@ -8,6 +8,8 @@ import logging
 from pathlib import Path
 
 from blendrender.runpod_scene import (
+    DEFAULT_UPLOAD_WORKERS,
+    MAX_UPLOAD_WORKERS,
     Boto3Uploader,
     RunpodS3Settings,
     RunpodScenePreparationError,
@@ -37,6 +39,16 @@ def main() -> None:
             "to skip files that finished uploading"
         ),
     )
+    parser.add_argument(
+        "--upload-workers",
+        type=int,
+        default=DEFAULT_UPLOAD_WORKERS,
+        metavar="COUNT",
+        help=(
+            f"Maximum concurrent S3 requests (default: {DEFAULT_UPLOAD_WORKERS}; "
+            f"maximum: {MAX_UPLOAD_WORKERS})"
+        ),
+    )
     args = parser.parse_args()
 
     try:
@@ -44,7 +56,7 @@ def main() -> None:
         prepared = prepare_scene(
             args.scene,
             settings,
-            Boto3Uploader(settings),
+            Boto3Uploader(settings, upload_workers=args.upload_workers),
             scene_id=args.scene_id,
             scene_name=args.name,
         )

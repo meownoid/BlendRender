@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import logging
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path, PurePosixPath
-from threading import Lock
+from threading import Barrier, Event, Lock
 
 import blendrender.runpod_scene as runpod_scene
 import pytest
@@ -20,11 +21,18 @@ from botocore.exceptions import ClientError
 
 
 class RecordingUploader:
-    def __init__(self, existing: dict[PurePosixPath, int] | None = None) -> None:
+    def __init__(
+        self,
+        existing: dict[PurePosixPath, int] | None = None,
+        *,
+        upload_workers: int = 8,
+    ) -> None:
         self.existing = existing or {}
+        self.upload_workers = upload_workers
         self.checked: list[PurePosixPath] = []
         self.uploads: list[tuple[str, PurePosixPath, bytes | dict[str, object]]] = []
         self.volume_checked = False
+        self._upload_lock = Lock()
 
     def ensure_volume(self) -> None:
         self.volume_checked = True
@@ -37,10 +45,40 @@ class RecordingUploader:
         return {key: size for key, size in self.existing.items() if key.is_relative_to(prefix)}
 
     def upload_file(self, source: Path, key: PurePosixPath) -> None:
-        self.uploads.append(("file", key, source.read_bytes()))
+        upload = ("file", key, source.read_bytes())
+        with self._upload_lock:
+            self.uploads.append(upload)
 
     def upload_json(self, payload: dict[str, object], key: PurePosixPath) -> None:
-        self.uploads.append(("json", key, payload))
+        with self._upload_lock:
+            self.uploads.append(("json", key, payload))
+
+
+class ConcurrentRecordingUploader(RecordingUploader):
+    def __init__(self) -> None:
+        super().__init__(upload_workers=2)
+        self._barrier = Barrier(2, timeout=5)
+        self._activity_lock = Lock()
+        self._active_uploads = 0
+        self.max_active_uploads = 0
+
+    def upload_file(self, source: Path, key: PurePosixPath) -> None:
+        with self._activity_lock:
+            self._active_uploads += 1
+            self.max_active_uploads = max(self.max_active_uploads, self._active_uploads)
+        try:
+            self._barrier.wait()
+            super().upload_file(source, key)
+        finally:
+            with self._activity_lock:
+                self._active_uploads -= 1
+
+
+class FailingRecordingUploader(RecordingUploader):
+    def upload_file(self, source: Path, key: PurePosixPath) -> None:
+        if key.name == "sky.png":
+            raise RunpodScenePreparationError("simulated upload failure")
+        super().upload_file(source, key)
 
 
 class RecordingS3Client:
@@ -264,15 +302,18 @@ def test_prepare_zip_extracts_and_uploads_the_project_tree(
     )
 
     assert prepared.entrypoint == "project/scenes/main.blend"
-    assert [key for _, key, _ in uploader.uploads] == [
+    uploaded_keys = [key for _, key, _ in uploader.uploads]
+    assert set(uploaded_keys[:-1]) == {
         PurePosixPath(
             "blendrender/scenes/00000000-0000-4000-8000-000000000402/source/project/scenes/main.blend"
         ),
         PurePosixPath(
             "blendrender/scenes/00000000-0000-4000-8000-000000000402/source/project/textures/sky.png"
         ),
-        PurePosixPath("blendrender/scenes/00000000-0000-4000-8000-000000000402/manifest.json"),
-    ]
+    }
+    assert uploaded_keys[-1] == PurePosixPath(
+        "blendrender/scenes/00000000-0000-4000-8000-000000000402/manifest.json"
+    )
     manifest = uploader.uploads[-1][2]
     assert isinstance(manifest, dict)
     assert manifest["source_kind"] == "zip"
@@ -326,6 +367,50 @@ def test_prepare_scene_resumes_and_skips_matching_existing_files(
         PurePosixPath(f"blendrender/scenes/{scene_id}/manifest.json"),
     ]
     assert f"Skipping already uploaded {existing_file} (5 bytes)" in caplog.messages
+
+
+def test_prepare_scene_uploads_project_files_concurrently(
+    tmp_path: Path, runpod_settings: RunpodS3Settings
+) -> None:
+    source = tmp_path / "hero.zip"
+    with zipfile.ZipFile(source, "w") as archive:
+        archive.writestr("project/scenes/main.blend", b"blend")
+        archive.writestr("project/textures/sky.png", b"png")
+    uploader = ConcurrentRecordingUploader()
+
+    prepare_scene(
+        source,
+        runpod_settings,
+        uploader,
+        scene_id="00000000-0000-4000-8000-000000000407",
+    )
+
+    assert uploader.max_active_uploads == 2
+    assert uploader.uploads[-1][1] == PurePosixPath(
+        "blendrender/scenes/00000000-0000-4000-8000-000000000407/manifest.json"
+    )
+
+
+def test_prepare_scene_does_not_publish_a_manifest_after_a_concurrent_upload_failure(
+    tmp_path: Path, runpod_settings: RunpodS3Settings
+) -> None:
+    source = tmp_path / "hero.zip"
+    with zipfile.ZipFile(source, "w") as archive:
+        archive.writestr("project/scenes/main.blend", b"blend")
+        archive.writestr("project/textures/sky.png", b"png")
+    uploader = FailingRecordingUploader(
+        {PurePosixPath("blendrender/workspace.json"): 1}, upload_workers=2
+    )
+
+    with pytest.raises(RunpodScenePreparationError, match="simulated upload failure"):
+        prepare_scene(
+            source,
+            runpod_settings,
+            uploader,
+            scene_id="00000000-0000-4000-8000-000000000408",
+        )
+
+    assert all(key.name != "manifest.json" for _, key, _ in uploader.uploads)
 
 
 def test_prepare_scene_refuses_to_resume_when_an_existing_file_has_a_different_size(
@@ -468,6 +553,53 @@ def test_boto3_uploader_disables_automatic_boto_retries(
     uploader = Boto3Uploader(runpod_settings)
 
     assert uploader._config.retries["total_max_attempts"] == 1
+
+
+@pytest.mark.parametrize("upload_workers", [0, runpod_scene.MAX_UPLOAD_WORKERS + 1])
+def test_boto3_uploader_rejects_invalid_upload_worker_counts(
+    upload_workers: int, runpod_settings: RunpodS3Settings
+) -> None:
+    with pytest.raises(RunpodScenePreparationError, match="Upload workers must be between"):
+        Boto3Uploader(runpod_settings, upload_workers=upload_workers)
+
+
+def test_boto3_uploader_bounds_concurrent_s3_requests(
+    runpod_settings: RunpodS3Settings,
+) -> None:
+    uploader = Boto3Uploader(runpod_settings, upload_workers=2)
+    assert uploader._config.max_pool_connections == 2
+    release = Event()
+    saturated = Event()
+    activity_lock = Lock()
+    active_requests = 0
+    max_active_requests = 0
+
+    def operation() -> str:
+        nonlocal active_requests, max_active_requests
+        with activity_lock:
+            active_requests += 1
+            max_active_requests = max(max_active_requests, active_requests)
+            if active_requests == 2:
+                saturated.set()
+        try:
+            release.wait(timeout=5)
+        finally:
+            with activity_lock:
+                active_requests -= 1
+        return "complete"
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = [
+            executor.submit(uploader._request_with_retry, "test request", operation)
+            for _ in range(3)
+        ]
+        try:
+            assert saturated.wait(timeout=5)
+        finally:
+            release.set()
+        assert [future.result() for future in futures] == ["complete"] * 3
+
+    assert max_active_requests == 2
 
 
 def test_boto3_uploader_logs_each_explicit_retry(

@@ -70,11 +70,13 @@ RunPod HTTPS proxy.
 | `COOKIE_SECURE` | `true` | Restrict cookies to HTTPS |
 | `AVAILABLE_BACKENDS` | probe | Development/test backend override |
 
-The container starts as root only long enough to create and own its workspace subdirectory, then
-drops to UID/GID `10001`. Preserve `/workspace/blendrender`; container disk is suitable only for
-temporary files and archive responses. A project ZIP is staged and then extracted on the network
-volume, so a worst-case 20 GiB compressed project plus 20 GiB extracted project requires at least
-41 GiB free before upload headroom. The dashboard resumes interrupted uploads for 24 hours.
+The container starts as root only long enough to create its workspace subdirectory, then drops to
+UID/GID `10001`. It does not change ownership of `/workspace/blendrender`: a RunPod network volume
+can be shared by peer Pods and populated through the S3-compatible API, and its mounted filesystem
+may reject ownership changes. Preserve `/workspace/blendrender`; container disk is suitable only
+for temporary files and archive responses. A project ZIP is staged and then extracted on the
+network volume, so a worst-case 20 GiB compressed project plus 20 GiB extracted project requires
+at least 41 GiB free before upload headroom. The dashboard resumes interrupted uploads for 24 hours.
 
 ## Preload a scene through RunPod's S3 API
 
@@ -99,7 +101,9 @@ export AWS_SECRET_ACCESS_KEY='rps_...'
 export RUNPOD_NETWORK_VOLUME_ID='NETWORK_VOLUME_ID'
 export RUNPOD_S3_REGION='EUR-IS-1'
 
-uv run python scripts/prepare_runpod_scene.py /path/to/project.zip --name 'Final exterior'
+uv run python scripts/prepare_runpod_scene.py /path/to/project.zip \
+  --name 'Final exterior' \
+  --upload-workers 8
 ```
 
 The script logs the generated scene ID before transferring files and prints it again when complete.
@@ -108,12 +112,16 @@ the unfinished scene and skips source files whose paths and byte sizes already m
 resume when an existing file differs, an unexpected object is present, or the final scene manifest
 has already been published. It never overwrites a completed scene.
 
-The script uses Boto3 for S3 transfers. Files of at least 50 MiB use the RunPod helper's multipart
-pattern: 50 MiB parts, four concurrent workers, explicitly logged retries for server errors and
-connection/read timeouts, completion verification after a timeout, and a final size check. A ZIP
-is extracted in a local temporary directory before transfer, so leave enough local temporary disk
-space for its unpacked project files. `MAX_UPLOAD_GB` has the same 20 GiB default limit as the
-dashboard upload. The transfer behavior follows RunPod's
+Source files upload concurrently, largest first, through a bounded pool of eight S3 requests by
+default. Set `--upload-workers` from 1 through 16 to tune the pool for the local connection and
+RunPod datacenter; all direct uploads, multipart parts, completion calls, and verification requests
+share that limit. Files of at least 50 MiB use 50 MiB multipart parts with up to four part workers
+per file. Transfers retain explicitly logged retries for server errors and connection/read timeouts,
+completion verification after a timeout, and a final size check.
+
+A ZIP is extracted in a local temporary directory before transfer, so leave enough local temporary
+disk space for its unpacked project files. `MAX_UPLOAD_GB` has the same 20 GiB default limit as the
+dashboard upload. The Boto3 transfer behavior follows RunPod's
 [large-file upload helper](https://github.com/runpod/runpod-s3-examples/blob/main/upload_large_file.py).
 
 ## Clear a RunPod network volume

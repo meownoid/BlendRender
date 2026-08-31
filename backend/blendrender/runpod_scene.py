@@ -13,11 +13,11 @@ import time
 import unicodedata
 import uuid
 from collections.abc import Callable, Iterator
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, as_completed, wait
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from threading import Lock
+from threading import BoundedSemaphore, Lock
 from typing import Any, Literal, Protocol, TypedDict, TypeVar, cast
 from urllib.parse import urlparse
 
@@ -33,6 +33,8 @@ GIBIBYTE = 1024**3
 MULTIPART_THRESHOLD_BYTES = 50 * MEBIBYTE
 MULTIPART_PART_SIZE_BYTES = 50 * MEBIBYTE
 MULTIPART_WORKERS = 4
+DEFAULT_UPLOAD_WORKERS = 8
+MAX_UPLOAD_WORKERS = 16
 S3_MAX_RETRIES = 5
 S3_INITIAL_TIMEOUT_SECONDS = 60
 S3_COMPLETE_POLL_SECONDS = 5
@@ -83,6 +85,8 @@ class RunpodS3Settings:
 
 
 class ObjectUploader(Protocol):
+    upload_workers: int
+
     def ensure_volume(self) -> None: ...
 
     def object_exists(self, key: PurePosixPath) -> bool: ...
@@ -141,8 +145,21 @@ class ClearedVolume:
 class Boto3Uploader:
     """Upload scene data through RunPod's S3 API with reliable large-file multipart transfers."""
 
-    def __init__(self, settings: RunpodS3Settings) -> None:
+    def __init__(
+        self, settings: RunpodS3Settings, *, upload_workers: int = DEFAULT_UPLOAD_WORKERS
+    ) -> None:
+        if (
+            isinstance(upload_workers, bool)
+            or not isinstance(upload_workers, int)
+            or not 1 <= upload_workers <= MAX_UPLOAD_WORKERS
+        ):
+            raise RunpodScenePreparationError(
+                f"Upload workers must be between 1 and {MAX_UPLOAD_WORKERS}"
+            )
         self.settings = settings
+        self.upload_workers = upload_workers
+        self._request_slots = BoundedSemaphore(upload_workers)
+        self._client_creation_lock = Lock()
         self._session: Any = boto3.session.Session(
             aws_access_key_id=settings.access_key_id,
             aws_secret_access_key=settings.secret_access_key,
@@ -152,6 +169,7 @@ class Boto3Uploader:
             region_name=settings.region,
             connect_timeout=S3_INITIAL_TIMEOUT_SECONDS,
             read_timeout=S3_INITIAL_TIMEOUT_SECONDS,
+            max_pool_connections=upload_workers,
             # Retries are explicit in _request_with_retry so each is visible in the terminal.
             retries={"total_max_attempts": 1, "mode": "standard"},
         )
@@ -530,14 +548,13 @@ class Boto3Uploader:
                     S3_MAX_RETRIES,
                     timeout,
                 )
-                client.complete_multipart_upload(
-                    Bucket=self.settings.volume_id,
-                    Key=key.as_posix(),
-                    UploadId=upload_id,
-                    MultipartUpload={"Parts": parts},
-                )
-                self._client = client
-                self._config = config
+                with self._request_slots:
+                    client.complete_multipart_upload(
+                        Bucket=self.settings.volume_id,
+                        Key=key.as_posix(),
+                        UploadId=upload_id,
+                        MultipartUpload={"Parts": parts},
+                    )
                 return
             except (BotoCoreError, ClientError) as exc:
                 last_error = exc
@@ -554,8 +571,6 @@ class Boto3Uploader:
 
             if self._wait_for_completed_object(client, key, expected_size, timeout):
                 logger.info("RunPod completed multipart upload for %s", key)
-                self._client = client
-                self._config = config
                 return
             if attempt == S3_MAX_RETRIES:
                 break
@@ -620,10 +635,13 @@ class Boto3Uploader:
             raise RunpodScenePreparationError(f"RunPod S3 size verification failed for {key}")
 
     def _new_client(self, config: Config) -> S3Client:
-        return cast(
-            S3Client,
-            self._session.client("s3", config=config, endpoint_url=self.settings.endpoint_url),
-        )
+        # Boto3 clients are thread-safe, but Sessions are not. Serialize the only Session access
+        # that can occur from concurrent multipart-completion workers.
+        with self._client_creation_lock:
+            return cast(
+                S3Client,
+                self._session.client("s3", config=config, endpoint_url=self.settings.endpoint_url),
+            )
 
     def _request(self, description: str, operation: Callable[[], T]) -> T:
         try:
@@ -635,7 +653,8 @@ class Boto3Uploader:
         for attempt in range(1, S3_MAX_RETRIES + 1):
             retry_error: Exception | None = None
             try:
-                return operation()
+                with self._request_slots:
+                    return operation()
             except ClientError as exc:
                 if not _is_retryable_s3_error(exc) or attempt == S3_MAX_RETRIES:
                     raise
@@ -716,6 +735,42 @@ class PreparedScene:
     entrypoint: str
 
 
+def _upload_files_concurrently(
+    uploader: ObjectUploader, files: tuple[tuple[Path, PurePosixPath], ...]
+) -> None:
+    if not files:
+        return
+
+    worker_count = min(uploader.upload_workers, len(files))
+    logger.info(
+        "Uploading %s remaining source files with up to %s concurrent workers",
+        len(files),
+        worker_count,
+    )
+    remaining = iter(files)
+    in_flight: set[Future[None]] = set()
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        for _ in range(worker_count):
+            local_file, key = next(remaining)
+            in_flight.add(executor.submit(uploader.upload_file, local_file, key))
+
+        try:
+            while in_flight:
+                completed, pending = wait(in_flight, return_when=FIRST_COMPLETED)
+                in_flight = set(pending)
+                for future in completed:
+                    future.result()
+                for _ in completed:
+                    next_file = next(remaining, None)
+                    if next_file is not None:
+                        local_file, key = next_file
+                        in_flight.add(executor.submit(uploader.upload_file, local_file, key))
+        except BaseException:
+            for future in in_flight:
+                future.cancel()
+            raise
+
+
 def prepare_scene(
     local_path: Path,
     settings: RunpodS3Settings,
@@ -792,11 +847,17 @@ def prepare_scene(
                 )
             file_states.append((key, local_file, expected_size, existing_size))
 
+        files_to_upload: list[tuple[Path, PurePosixPath, int]] = []
         for key, local_file, expected_size, existing_size in file_states:
-            if existing_size is None:
-                uploader.upload_file(local_file, key)
-                continue
-            logger.info("Skipping already uploaded %s (%s bytes)", key, expected_size)
+            if existing_size is not None:
+                logger.info("Skipping already uploaded %s (%s bytes)", key, expected_size)
+            else:
+                files_to_upload.append((local_file, key, expected_size))
+        files_to_upload.sort(key=lambda item: item[2], reverse=True)
+        _upload_files_concurrently(
+            uploader,
+            tuple((local_file, key) for local_file, key, _ in files_to_upload),
+        )
         manifest = SceneManifest(
             id=identifier,
             filename=Path(prepared.entrypoint).name,

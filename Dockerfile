@@ -60,5 +60,5 @@ RUN groupadd --gid 10001 blendrender \
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD ["python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
-ENTRYPOINT ["/usr/bin/tini", "--", "/app/scripts/container-entrypoint.sh"]
+ENTRYPOINT ["/usr/bin/tini", "-s", "--", "/app/scripts/container-entrypoint.sh"]
 CMD ["uvicorn", "blendrender.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "*"]
