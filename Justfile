@@ -27,6 +27,7 @@ check:
     cd frontend && npm run lint && npm run build
 
 docker-build:
+    git submodule update --init --recursive
     docker buildx build --platform linux/amd64 --load -t blendrender:local .
 
 e2e-backend:

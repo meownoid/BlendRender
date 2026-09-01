@@ -244,7 +244,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 
 /* Shared-workspace dashboard */
 :root { --accent: #ff8a1f; --accent-strong: #ff941f; --canvas: #0d1013; }
-.shared-app { min-height: 100vh; background: var(--canvas); color: var(--text); }
+.shared-app { min-height: 100vh; height: 100vh; display: grid; grid-template-rows: auto auto minmax(0, 1fr); background: var(--canvas); color: var(--text); }
 .shared-header { height: 58px; display: flex; align-items: stretch; gap: 24px; padding: 0 20px; border-bottom: 1px solid var(--line); background: #0d1115; }
 .shared-header .brand { font-size: 20px; letter-spacing: -.035em; }
 .shared-header .brand__mark { width: 43px; height: 43px; margin: -7px -6px -7px -7px; }
@@ -257,7 +257,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .shared-header .system-meter { min-height: 34px; padding: 0 9px; gap: 8px; }
 .shared-header .system-meter__metric { min-width: 34px; }
 .shared-header .system-meter__metric strong { max-width: 94px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.shared-body { min-height: calc(100vh - 58px); display: grid; grid-template-columns: 278px minmax(0, 1fr); }
+.shared-body { min-height: 0; display: grid; grid-template-columns: 278px minmax(0, 1fr); }
 .scene-rail, .jobs-sidebar { min-width: 0; padding: 18px 14px; border-right: 1px solid var(--line); background: #0e1317; }
 .rail-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .rail-heading div { display: flex; align-items: center; gap: 8px; }
@@ -270,7 +270,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .scene-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 560; }
 .scene-row small { color: #9ca7b0; font-size: 11px; }
 .rail-empty { min-height: 180px; display: grid; place-content: center; justify-items: center; gap: 12px; color: var(--muted); font-size: 13px; text-align: center; }
-.scene-workspace { min-width: 0; padding: 28px; overflow: auto; }
+.scene-workspace { min-width: 0; min-height: 0; padding: 28px; overflow: auto; }
 .scene-workspace--empty { min-height: calc(100vh - 58px); display: grid; place-content: center; justify-items: center; gap: 10px; color: var(--muted); text-align: center; }
 .scene-workspace--empty h1 { margin: 0; color: var(--text); }
 .scene-workspace--empty p { margin: 0; }
@@ -351,6 +351,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   .header-actions { margin-left: 0; flex: 1; justify-content: flex-end; }
   .pod-state { display: none; }
   .header-new-job { font-size: 0 !important; width: 36px; padding: 0 !important; }
+  .shared-app { height: auto; display: block; }
   .shared-body { display: block; min-height: 0; }
   .scene-rail { border-right: 0; border-bottom: 1px solid var(--line); }
   .scene-list { display: flex; overflow-x: auto; }

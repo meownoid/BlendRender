@@ -105,6 +105,8 @@ def run() -> None:
     scene.cycles.device = "CPU" if cpu_render else "GPU"
     if (samples := config.get("samples")) is not None:
         scene.cycles.samples = int(samples)
+    if (tile_size := config.get("tile_size")) is not None:
+        scene.cycles.tile_size = int(tile_size)
     if (resolution_x := config.get("resolution_x")) is not None:
         scene.render.resolution_x = int(resolution_x)
     if (resolution_y := config.get("resolution_y")) is not None:
@@ -150,6 +152,7 @@ def run() -> None:
                     "resolution_y": scene.render.resolution_y,
                     "resolution_percentage": scene.render.resolution_percentage,
                     "samples": scene.cycles.samples,
+                    "tile_size": scene.cycles.tile_size,
                     "denoising": scene.cycles.use_denoising,
                     "view_transform": scene.view_settings.look,
                     "compositor_nodes": scene.use_nodes,

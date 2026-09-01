@@ -19,6 +19,36 @@ COPY pyproject.toml uv.lock ./
 COPY backend/ ./backend/
 RUN uv sync --frozen --no-dev --no-editable
 
+FROM ubuntu:24.04 AS alembic-builder
+ARG ALEMBIC_REF=1.8.5
+ARG ALEMBIC_COMMIT=f4e3cc33e4270ade9d076a2cac7a2a4409c61675
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential ca-certificates cmake git libimath-dev \
+    && rm -rf /var/lib/apt/lists/*
+RUN git clone --depth 1 --branch "$ALEMBIC_REF" https://github.com/alembic/alembic.git /build/alembic \
+    && test "$(git -C /build/alembic rev-parse HEAD)" = "$ALEMBIC_COMMIT" \
+    && cmake -S /build/alembic -B /build/alembic-build \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX=/opt/alembic \
+      -DUSE_BINARIES=OFF \
+      -DUSE_TESTS=OFF \
+    && cmake --build /build/alembic-build --parallel 2 \
+    && cmake --install /build/alembic-build
+
+FROM ubuntu:24.04 AS flip-fluids-builder
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential cmake libimath-dev \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /build
+COPY --from=alembic-builder /opt/alembic /opt/alembic
+COPY third_party/flip-fluids/ ./
+RUN cmake -S . -B build \
+      -DALEMBIC_PACKAGE_ROOT=/opt/alembic \
+      -DDISTRIBUTE_SOURCE=OFF \
+    && cmake --build build --parallel 2
+
 FROM ubuntu:24.04 AS runtime
 ARG BLENDER_VERSION=5.2.1
 ARG BLENDER_SHA256=a31f524fa99a527d3d52b7f5aaa68c34e1a19d5a1c9473f79c5cc610fd5b10e9
@@ -28,10 +58,12 @@ ENV DEBIAN_FRONTEND=noninteractive \
     WORKSPACE_ROOT=/workspace/blendrender \
     BLENDER_BIN=/opt/blender/blender \
     RENDERER_SCRIPT=/app/renderer/blendrender_render.py \
+    FLIP_FLUIDS_ADDON=flip_fluids_addon \
+    FLIP_FLUIDS_BOOTSTRAP_SCRIPT=/app/renderer/blendrender_enable_flip_fluids.py \
     FRONTEND_DIST=/app/frontend/dist
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl xz-utils tini python3 util-linux \
+      ca-certificates curl xz-utils tini python3 util-linux libimath-3-1-29t64 \
       libegl1 libgl1 libsm6 libx11-6 libxext6 libxfixes3 libxi6 libxkbcommon0 libxrender1 \
       libxxf86vm1 libwayland-client0 \
     && curl -fsSLo /tmp/blender.tar.xz \
@@ -44,6 +76,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /opt/blender/5.2/datafiles/locale \
     && apt-get purge -y --auto-remove curl xz-utils \
     && rm -rf /var/lib/apt/lists/*
+
+COPY --from=flip-fluids-builder /build/build/bl_flip_fluids/flip_fluids_addon/ \
+    /opt/blender/5.2/scripts/addons/flip_fluids_addon/
+COPY --from=alembic-builder /opt/alembic/lib/ \
+    /opt/blender/5.2/scripts/addons/flip_fluids_addon/ffengine/lib/
+COPY renderer/blendrender_enable_flip_fluids.py /tmp/blendrender_enable_flip_fluids.py
+RUN /opt/blender/blender --background --factory-startup --disable-autoexec --python-exit-code 1 \
+      --python /tmp/blendrender_enable_flip_fluids.py \
+      --python-expr "from flip_fluids_addon.ffengine.ffengine import ffengine; assert ffengine.FluidSimulation_get_version"
 
 WORKDIR /app
 COPY --from=python-builder /app/.venv /app/.venv

@@ -41,6 +41,8 @@ class Settings:
     session_ttl_seconds: int
     cancel_grace_seconds: float
     available_backends_override: tuple[str, ...]
+    flip_fluids_addon: str | None = None
+    flip_fluids_bootstrap_script: Path | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -54,6 +56,7 @@ class Settings:
             for item in os.getenv("AVAILABLE_BACKENDS", "").split(",")
             if item.strip().upper() in {"OPTIX", "CUDA", "CPU"}
         )
+        flip_fluids_addon = _addon_module_env("FLIP_FLUIDS_ADDON")
         return cls(
             app_password=password,
             workspace_root=Path(
@@ -73,6 +76,17 @@ class Settings:
             session_ttl_seconds=int(os.getenv("SESSION_TTL_SECONDS", str(7 * 24 * 3600))),
             cancel_grace_seconds=float(os.getenv("CANCEL_GRACE_SECONDS", "8")),
             available_backends_override=override,
+            flip_fluids_addon=flip_fluids_addon,
+            flip_fluids_bootstrap_script=(
+                Path(
+                    os.getenv(
+                        "FLIP_FLUIDS_BOOTSTRAP_SCRIPT",
+                        str(project_root / "renderer/blendrender_enable_flip_fluids.py"),
+                    )
+                ).resolve()
+                if flip_fluids_addon is not None
+                else None
+            ),
         )
 
     @property
@@ -95,4 +109,13 @@ def _pod_id() -> str:
         raise RuntimeError(
             "BLENDRENDER_POD_ID must contain only letters, digits, underscores, or hyphens"
         )
+    return value
+
+
+def _addon_module_env(name: str) -> str | None:
+    value = os.getenv(name, "").strip()
+    if not value:
+        return None
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", value):
+        raise RuntimeError(f"{name} must be a valid Python module name")
     return value

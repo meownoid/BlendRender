@@ -12,11 +12,13 @@
 ## First setup
 
 ```bash
+git submodule update --init --recursive
 cp .env.example .env
 just install
 ```
 
-`just install` runs `uv sync` and `npm ci`. Keep `uv.lock` and
+`git submodule update --init --recursive` obtains the public, tag-pinned FLIP Fluids source that
+the Dockerfiles compile. `just install` runs `uv sync` and `npm ci`. Keep `uv.lock` and
 `frontend/package-lock.json` in sync with intentional dependency changes.
 
 Start the two development servers in separate terminals:
@@ -60,7 +62,7 @@ layout.
 | `just e2e-backend` | Real Blender CPU render through the public API in a Colima container |
 
 GitHub Actions runs the equivalent test and check commands for pull requests and trusted pushes.
-Pushes to `main` and `v*` tags then build and publish to the repository's public GHCR package after
+Pushes to `main` and `v*` tags then build and publish to the repository's GHCR package after
 verification succeeds.
 
 During iteration, narrower commands are useful:

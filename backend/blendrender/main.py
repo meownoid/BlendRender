@@ -360,6 +360,7 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
             frame_end=frame_end,
             backend=payload.backend,
             samples=payload.samples,
+            tile_size=payload.tile_size,
             resolution_x=payload.resolution_x,
             resolution_y=payload.resolution_y,
             resolution_percentage=payload.resolution_percentage,

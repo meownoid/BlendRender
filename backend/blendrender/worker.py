@@ -48,6 +48,32 @@ def create_preview(source: Path, destination: Path) -> None:
         preview.close()
 
 
+def blender_command(settings: Settings, scene_path: Path, config_path: Path) -> list[str]:
+    command = [
+        str(settings.blender_bin),
+        "--background",
+        "--disable-autoexec",
+        "--python-exit-code",
+        "1",
+    ]
+    if settings.flip_fluids_addon is not None:
+        if settings.flip_fluids_bootstrap_script is None:
+            raise RuntimeError(
+                "FLIP_FLUIDS_BOOTSTRAP_SCRIPT is required when FLIP_FLUIDS_ADDON is set"
+            )
+        command.extend(["--python", str(settings.flip_fluids_bootstrap_script)])
+    command.extend(
+        [
+            str(scene_path),
+            "--python",
+            str(settings.renderer_script),
+            "--",
+            str(config_path),
+        ]
+    )
+    return command
+
+
 class RenderWorker:
     def __init__(self, settings: Settings, store: WorkspaceStore):
         self.settings = settings
@@ -167,23 +193,18 @@ class RenderWorker:
                 "output_dir": str(output_dir),
                 "project_root": str(project_root),
             }
-            for field in ("samples", "resolution_x", "resolution_y", "resolution_percentage"):
+            for field in (
+                "samples",
+                "tile_size",
+                "resolution_x",
+                "resolution_y",
+                "resolution_percentage",
+            ):
                 if (value := getattr(job, field)) is not None:
                     values[field] = value
             config = RenderConfig.model_validate(values)
             await asyncio.to_thread(self.store.write_render_config, job.id, config)
-            command = [
-                str(self.settings.blender_bin),
-                "--background",
-                "--disable-autoexec",
-                "--python-exit-code",
-                "1",
-                str(scene_path),
-                "--python",
-                str(self.settings.renderer_script),
-                "--",
-                str(paths["config"]),
-            ]
+            command = blender_command(self.settings, scene_path, paths["config"])
             self._current_job_id = job.id
             self._process = await asyncio.create_subprocess_exec(
                 *command,

@@ -14,6 +14,10 @@ Do not accept untrusted `.blend` files solely because Python auto-execution is d
 files may still exercise Blender parsers, codecs, linked data, render settings, compositor nodes,
 and high resource consumption. Isolate the Pod and avoid attaching unrelated credentials or data.
 
+The production image also runs the pinned public FLIP Fluids Demo v1.8.8 add-on before opening a
+scene. This is trusted administrator-built image code, not an add-on supplied by an upload; embedded
+Python in uploaded scenes remains disabled.
+
 Scene filenames, errors, logs, source projects, and results can contain sensitive project
 information. The shared `WORKSPACE_ROOT` should be protected accordingly; every attached Pod can
 read its contents.

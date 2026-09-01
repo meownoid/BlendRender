@@ -69,13 +69,35 @@ def test_scene_upload_then_local_job_creation(settings) -> None:
                 "start": 1,
                 "end": 3,
                 "backend": "OPTIX",
+                "tile_size": 256,
             },
         )
         assert created.status_code == 201, created.text
         job = created.json()
         assert job["owner_pod_id"] == "pod-a"
         assert job["scene_id"] == scene["id"]
+        assert job["tile_size"] == 256
         assert client.get("/api/scenes").json()[0]["job_count"] == 1
+
+
+def test_job_creation_rejects_an_out_of_range_tile_size(settings) -> None:
+    app = create_app(settings, start_worker=False)
+    with TestClient(app) as client:
+        login(client)
+        scene = upload_scene(client)
+        response = client.post(
+            "/api/jobs",
+            json={
+                "scene_id": scene["id"],
+                "mode": "still",
+                "frame": 1,
+                "backend": "CPU",
+                "tile_size": 7,
+            },
+        )
+
+        assert response.status_code == 422
+        assert "greater than or equal to 8" in response.text
 
 
 def test_scene_upload_uses_optional_name_and_sanitizes_fallback(settings) -> None:

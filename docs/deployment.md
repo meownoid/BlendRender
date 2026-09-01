@@ -13,13 +13,15 @@ Pod cannot be stopped, only terminated; terminated-owner jobs remain shared read
 
 ## Production image
 
-The production `Dockerfile` builds the Vite frontend, creates a locked Python environment, and
-downloads the pinned Blender 5.2.1 Linux x64 archive with SHA-256 verification. It creates the
-shared workspace subdirectory before dropping to UID/GID `10001` under `tini`.
+The production `Dockerfile` builds the Vite frontend, creates a locked Python environment, compiles
+the public FLIP Fluids Demo v1.8.8 submodule, and downloads the pinned Blender 5.2.1 Linux x64
+archive with SHA-256 verification. It creates the shared workspace subdirectory before dropping to
+UID/GID `10001` under `tini`.
 
 Build and push the required platform explicitly:
 
 ```bash
+git submodule update --init --recursive
 docker buildx build --platform linux/amd64 \
   -t YOUR_REGISTRY/blendrender:2.1.0 --push .
 ```
@@ -65,6 +67,8 @@ RunPod HTTPS proxy.
 | `BLENDRENDER_POD_ID` | `RUNPOD_POD_ID`, then hostname | Development override for Pod ownership |
 | `BLENDER_BIN` | `/opt/blender/blender` | Blender executable |
 | `RENDERER_SCRIPT` | bundled renderer | Blender-side runner |
+| `FLIP_FLUIDS_ADDON` | unset outside the image | Bundled add-on module to enable before a scene opens |
+| `FLIP_FLUIDS_BOOTSTRAP_SCRIPT` | bundled bootstrap | Trusted script that enables `FLIP_FLUIDS_ADDON` |
 | `MAX_UPLOAD_GB` | `20` | Upload and extracted ZIP limit |
 | `UPLOAD_CHUNK_MB` | `8` | Maximum browser upload request size in whole MiB; lower it for slower or less reliable proxies |
 | `COOKIE_SECURE` | `true` | Restrict cookies to HTTPS |
@@ -77,6 +81,9 @@ may reject ownership changes. Preserve `/workspace/blendrender`; container disk 
 for temporary files and archive responses. A project ZIP is staged and then extracted on the
 network volume, so a worst-case 20 GiB compressed project plus 20 GiB extracted project requires
 at least 41 GiB free before upload headroom. The dashboard resumes interrupted uploads for 24 hours.
+
+Production and E2E images set `FLIP_FLUIDS_ADDON=flip_fluids_addon`; local Blender development
+leaves it unset unless the same compatible add-on is installed locally.
 
 ## Preload a scene through RunPod's S3 API
 

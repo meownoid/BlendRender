@@ -9,12 +9,15 @@ variant.
 
 Results are immutable scene assets. Rendering the same scene/frame on multiple Pods preserves every
 PNG/WebP variant along with backend, hardware, samples, pod, and render-duration metadata.
+Jobs use the uploaded scene's render settings by default, with optional sample, Cycles tile-size,
+and resolution overrides in the dashboard and API.
 
 ## RunPod quick start
 
 1. Build and publish the Linux image:
 
    ```bash
+   git submodule update --init --recursive
    docker buildx build --platform linux/amd64 -t YOUR_REGISTRY/blendrender:2.1.0 --push .
    ```
 
@@ -35,6 +38,7 @@ confirmation-guarded script to clear a network volume.
 ## Local development
 
 ```bash
+git submodule update --init --recursive
 cp .env.example .env
 just install
 just dev-backend

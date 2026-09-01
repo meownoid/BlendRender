@@ -28,6 +28,7 @@ const failedJob: Job = {
   frame_end: 1,
   backend: 'CPU',
   samples: null,
+  tile_size: null,
   resolution_x: null,
   resolution_y: null,
   resolution_percentage: null,

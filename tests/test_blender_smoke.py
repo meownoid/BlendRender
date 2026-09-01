@@ -89,6 +89,7 @@ bpy.ops.wm.save_as_mainfile(filepath=arguments[1])
                 "frames": [1],
                 "output_dir": str(output_dir),
                 "project_root": str(project_root),
+                "tile_size": 256,
                 "diagnostic_report": str(report_path),
             }
         ),
@@ -128,6 +129,7 @@ bpy.ops.wm.save_as_mainfile(filepath=arguments[1])
         "resolution_y": 24,
         "resolution_percentage": 100,
         "samples": 1,
+        "tile_size": 256,
         "denoising": False,
         "view_transform": "None",
         "compositor_nodes": True,

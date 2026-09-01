@@ -111,6 +111,7 @@ class CreateJobRequest(BaseModel):
     start: int | None = None
     end: int | None = None
     samples: int | None = Field(default=None, ge=1, le=1_000_000)
+    tile_size: int | None = Field(default=None, ge=8, le=8_192)
     resolution_x: int | None = Field(default=None, ge=4, le=65_536)
     resolution_y: int | None = Field(default=None, ge=4, le=65_536)
     resolution_percentage: int | None = Field(default=None, ge=1, le=100)
@@ -146,6 +147,7 @@ class JobManifest(BaseModel):
     frame_end: int
     backend: Backend
     samples: int | None = None
+    tile_size: int | None = None
     resolution_x: int | None = None
     resolution_y: int | None = None
     resolution_percentage: int | None = None
@@ -199,6 +201,7 @@ class RenderConfig(BaseModel):
     output_dir: str
     project_root: str
     samples: int | None = Field(default=None, ge=1, le=1_000_000)
+    tile_size: int | None = Field(default=None, ge=8, le=8_192)
     resolution_x: int | None = Field(default=None, ge=4, le=65_536)
     resolution_y: int | None = Field(default=None, ge=4, le=65_536)
     resolution_percentage: int | None = Field(default=None, ge=1, le=100)

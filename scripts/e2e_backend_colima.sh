@@ -2,6 +2,7 @@
 set -euo pipefail
 
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+git -C "$project_root" submodule update --init --recursive
 host_arch="$(uname -m)"
 if [[ "$host_arch" == "arm64" ]]; then
   host_arch="aarch64"

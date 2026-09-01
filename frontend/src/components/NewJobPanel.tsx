@@ -18,6 +18,7 @@ export function NewJobPanel({ open, scene, system, busy, onClose, onSubmit }: Ne
   const [end, setEnd] = useState(120)
   const [backend, setBackend] = useState<Backend>('OPTIX')
   const [samples, setSamples] = useState('')
+  const [tileSize, setTileSize] = useState('')
   const [resolutionX, setResolutionX] = useState('')
   const [resolutionY, setResolutionY] = useState('')
   const [resolutionPercentage, setResolutionPercentage] = useState('')
@@ -41,6 +42,7 @@ export function NewJobPanel({ open, scene, system, busy, onClose, onSubmit }: Ne
         end,
         backend,
         samples: samples ? Number(samples) : undefined,
+        tile_size: tileSize ? Number(tileSize) : undefined,
         resolution_x: resolutionX ? Number(resolutionX) : undefined,
         resolution_y: resolutionY ? Number(resolutionY) : undefined,
         resolution_percentage: resolutionPercentage ? Number(resolutionPercentage) : undefined,
@@ -54,6 +56,7 @@ export function NewJobPanel({ open, scene, system, busy, onClose, onSubmit }: Ne
     {mode === 'still' ? <label className="field"><span>Frame</span><input type="number" value={frame} onChange={(event) => setFrame(Number(event.target.value))} /></label> : <div className="range-fields"><label className="field"><span>Start</span><input type="number" value={start} onChange={(event) => setStart(Number(event.target.value))} /></label><label className="field"><span>End</span><input type="number" value={end} onChange={(event) => setEnd(Number(event.target.value))} /></label></div>}
     <fieldset><legend>Backend on this pod</legend><div className="segmented segmented--three">{(['OPTIX', 'CUDA', 'CPU'] as Backend[]).map((item) => <button key={item} disabled={!system?.available_backends.includes(item)} className={backend === item ? 'is-selected' : ''} onClick={() => setBackend(item)}>{item === 'OPTIX' ? 'OptiX' : item}</button>)}</div></fieldset>
     <label className="field"><span>Samples (optional)</span><input type="number" min="1" value={samples} placeholder="Use scene setting" onChange={(event) => setSamples(event.target.value)} /></label>
+    <label className="field"><span>Tile size (optional)</span><input type="number" min="8" max="8192" value={tileSize} placeholder="Use scene setting" onChange={(event) => setTileSize(event.target.value)} /></label>
     <div className="range-fields"><label className="field"><span>Width (optional)</span><input type="number" min="4" value={resolutionX} placeholder="Scene width" onChange={(event) => setResolutionX(event.target.value)} /></label><label className="field"><span>Height (optional)</span><input type="number" min="4" value={resolutionY} placeholder="Scene height" onChange={(event) => setResolutionY(event.target.value)} /></label></div>
     <label className="field"><span>Resolution scale (optional)</span><input type="number" min="1" max="100" value={resolutionPercentage} placeholder="Scene percentage" onChange={(event) => setResolutionPercentage(event.target.value)} /></label>
     {error ? <p className="panel-error">{error}</p> : null}

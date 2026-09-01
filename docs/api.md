@@ -43,14 +43,15 @@ or running.
   "start": 1,
   "end": 120,
   "backend": "OPTIX",
-  "samples": 128
+  "samples": 128,
+  "tile_size": 256
 }
 ```
 
-For `mode: "still"`, provide `frame`. Optional `samples`, `resolution_x` plus `resolution_y`, and
-`resolution_percentage` retain the existing limits; omitted values use the scene setting. The
-backend must be available on the receiving Pod. The response records `owner_pod_id` and
-`owner_online`.
+For `mode: "still"`, provide `frame`. Optional `samples`, `tile_size` (8–8192),
+`resolution_x` plus `resolution_y`, and `resolution_percentage` retain the existing limits;
+omitted values use the scene setting. The backend must be available on the receiving Pod. The
+response records `owner_pod_id` and `owner_online`.
 
 `GET /api/jobs` supports optional `scene_id` and `status`. Job detail is `GET /api/jobs/{id}`.
 Cancel, retry, and delete use the existing `/cancel`, `/retry`, and `DELETE` routes, but only the

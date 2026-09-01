@@ -26,6 +26,7 @@ export interface Job {
   frame_end: number
   backend: Backend
   samples: number | null
+  tile_size: number | null
   resolution_x: number | null
   resolution_y: number | null
   resolution_percentage: number | null
@@ -104,6 +105,7 @@ export interface CreateJobForm {
   end: number
   backend: Backend
   samples?: number
+  tile_size?: number
   resolution_x?: number
   resolution_y?: number
   resolution_percentage?: number
