@@ -71,9 +71,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=flip-fluids-builder /build/build/bl_flip_fluids/flip_fluids_addon/ \
-    /opt/blender/5.2/scripts/addons/flip_fluids_addon/
+    /opt/blender/5.2/scripts/addons_core/flip_fluids_addon/
 COPY --from=alembic-builder /opt/alembic/lib/ \
-    /opt/blender/5.2/scripts/addons/flip_fluids_addon/ffengine/lib/
+    /opt/blender/5.2/scripts/addons_core/flip_fluids_addon/ffengine/lib/
 COPY renderer/blendrender_enable_flip_fluids.py /tmp/blendrender_enable_flip_fluids.py
 RUN /opt/blender/blender --background --factory-startup --disable-autoexec --python-exit-code 1 \
       --python /tmp/blendrender_enable_flip_fluids.py \
