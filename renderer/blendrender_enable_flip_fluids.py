@@ -15,7 +15,10 @@ def run() -> None:
     addon_utils.modules_refresh()
     _, loaded = addon_utils.check(module)
     if not loaded:
-        addon_utils.enable(module, default_set=False, persistent=False)
+        # FLIP Fluids reads its preferences while registering. Blender creates that entry only
+        # when the add-on is enabled with default_set=True; nothing is persisted unless Blender
+        # subsequently saves user preferences.
+        addon_utils.enable(module, default_set=True, persistent=False)
     _, loaded = addon_utils.check(module)
     if not loaded:
         raise RuntimeError(f"Unable to enable bundled Blender add-on: {module}")
