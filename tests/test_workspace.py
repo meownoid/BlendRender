@@ -84,6 +84,15 @@ def test_legacy_scene_manifest_uses_filename_as_name(settings) -> None:
     assert store.get_scene(scene_id).name == "input.blend"
 
 
+def test_workspace_json_is_pretty_printed(settings) -> None:
+    store = WorkspaceStore(settings)
+    store.initialize()
+
+    content = (settings.workspace_root / "workspace.json").read_text()
+
+    assert content == json.dumps(json.loads(content), indent=2, sort_keys=True) + "\n"
+
+
 def test_expired_upload_staging_is_removed(settings) -> None:
     store = WorkspaceStore(settings)
     store.initialize()

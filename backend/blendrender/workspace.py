@@ -650,7 +650,7 @@ def _atomic_write_model(path: Path, model: BaseModel, *, create_only: bool = Fal
 
 def _atomic_write_json(path: Path, payload: dict[str, Any], *, create_only: bool = False) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    content = json.dumps(payload, separators=(",", ":"), sort_keys=True) + "\n"
+    content = json.dumps(payload, indent=2, sort_keys=True) + "\n"
     if create_only:
         with path.open("x", encoding="utf-8") as destination:
             destination.write(content)

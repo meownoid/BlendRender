@@ -564,6 +564,19 @@ def test_boto3_uploader_reads_a_json_object(
     assert uploader.read_json(PurePosixPath(key)) == {"id": "scene"}
 
 
+def test_boto3_uploader_pretty_prints_json(
+    monkeypatch: pytest.MonkeyPatch, runpod_settings: RunpodS3Settings
+) -> None:
+    client = RecordingS3Client()
+    uploader = Boto3Uploader(runpod_settings)
+    monkeypatch.setattr(uploader, "_client", client)
+    key = PurePosixPath("blendrender/scenes/scene/manifest.json")
+
+    uploader.upload_json({"z": 1, "a": {"value": True}}, key)
+
+    assert client.objects[key.as_posix()] == b'{\n  "a": {\n    "value": true\n  },\n  "z": 1\n}\n'
+
+
 def test_boto3_uploader_downloads_a_result_without_overwriting(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, runpod_settings: RunpodS3Settings
 ) -> None:

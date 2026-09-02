@@ -178,7 +178,8 @@ def run() -> None:
                     "compositor_nodes": scene.use_nodes,
                     "engine": scene.render.engine,
                     "file_format": scene.render.image_settings.file_format,
-                }
+                },
+                indent=2,
             ),
             encoding="utf-8",
         )

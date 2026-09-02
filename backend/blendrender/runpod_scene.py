@@ -364,7 +364,7 @@ class Boto3Uploader:
         logger.info("Uploaded %s", key)
 
     def upload_json(self, payload: dict[str, object], key: PurePosixPath) -> None:
-        content = (json.dumps(payload, separators=(",", ":"), sort_keys=True) + "\n").encode()
+        content = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode()
         logger.info("Uploading %s directly (JSON, %s bytes)", key, len(content))
         self._request(
             f"upload {key}",
