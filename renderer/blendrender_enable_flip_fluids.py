@@ -19,7 +19,9 @@ def configure_material_library(module: str) -> None:
     material_library_class = material_library_objects.FLIPFluidMaterialLibrary
 
     library_path = str(Path(material_library.__file__).resolve().parent / "material_library")
+    material_library_root = Path(library_path)
     original_check_icons_initialized = material_library_class.check_icons_initialized
+    original_generate_icons = material_library_class._generate_material_library_icons
 
     def check_icons_initialized(library: object) -> None:
         # `library_path` is stored in .blend files. A scene made on another host can therefore
@@ -30,6 +32,25 @@ def configure_material_library(module: str) -> None:
         original_check_icons_initialized(library)
 
     material_library_class.check_icons_initialized = check_icons_initialized
+
+    def generate_material_library_icons(library: object) -> None:
+        original_generate_icons(library)
+        for data_library in tuple(bpy.data.libraries):
+            if not data_library.filepath:
+                continue
+            filepath = Path(bpy.path.abspath(data_library.filepath)).resolve()
+            if not filepath.is_relative_to(material_library_root):
+                continue
+            try:
+                # FLIP appends these files only to produce previews and removes the copied
+                # materials before returning. Do not leave the now-unreferenced libraries in
+                # bpy.data: BlendRender correctly treats all remaining libraries as scene input.
+                bpy.data.libraries.remove(data_library, do_unlink=False)
+            except RuntimeError:
+                # Preserve any unexpected linked data instead of unlinking it implicitly.
+                continue
+
+    material_library_class._generate_material_library_icons = generate_material_library_icons
 
     @bpy.app.handlers.persistent
     def reset_material_library(_: object) -> None:

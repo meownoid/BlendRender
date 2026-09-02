@@ -19,6 +19,15 @@ class FakeMaterialLibrary:
     def check_icons_initialized(self) -> None:
         self.original_check_calls += 1
 
+    def _generate_material_library_icons(self) -> None:
+        pass
+
+
+class FakeLibraries(list[object]):
+    def remove(self, library: object, *, do_unlink: bool) -> None:
+        assert not do_unlink
+        super().remove(library)
+
 
 def test_flip_fluids_bootstrap_replaces_a_scene_saved_material_library_path(
     monkeypatch,
@@ -26,11 +35,21 @@ def test_flip_fluids_bootstrap_replaces_a_scene_saved_material_library_path(
     script = Path(__file__).parents[1] / "renderer" / "blendrender_enable_flip_fluids.py"
     library = FakeMaterialLibrary()
     handlers = types.SimpleNamespace(load_post=[], persistent=lambda handler: handler)
+    bundled_library = types.SimpleNamespace(
+        filepath=(
+            "/opt/blender/5.2/scripts/addons_core/flip_fluids_addon/materials/"
+            "material_library/surface/FF Apple Juice.blend"
+        )
+    )
+    scene_library = types.SimpleNamespace(filepath="/tmp/project/scene_library.blend")
+    data_libraries = FakeLibraries([bundled_library, scene_library])
     bpy = types.ModuleType("bpy")
     bpy.app = types.SimpleNamespace(handlers=handlers)
     bpy.context = types.SimpleNamespace(
         scene=types.SimpleNamespace(flip_fluid_material_library=library)
     )
+    bpy.data = types.SimpleNamespace(libraries=data_libraries)
+    bpy.path = types.SimpleNamespace(abspath=lambda filepath: filepath)
 
     addon_utils = types.ModuleType("addon_utils")
     loaded = False
@@ -93,6 +112,9 @@ def test_flip_fluids_bootstrap_replaces_a_scene_saved_material_library_path(
 
     library.check_icons_initialized()
     assert library.original_check_calls == 1
+
+    library._generate_material_library_icons()
+    assert data_libraries == [scene_library]
 
     library.library_path = "/Users/artist/Library/Application Support/Blender/material_library"
     handlers.load_post[0](None)
