@@ -21,3 +21,10 @@ test('shows an uploaded scene size in the scene rail', () => {
 
   expect(screen.getByText('2.5 MB · 3 results · 1 jobs')).toBeInTheDocument()
 })
+
+test('uses the centered empty state only when there are no scenes', () => {
+  render(<SceneRail scenes={[]} selectedId={null} onSelect={vi.fn()} onUpload={vi.fn()} />)
+
+  expect(screen.getByText('Upload a .blend or project ZIP to begin.').closest('.scene-list'))
+    .toHaveClass('scene-list--empty')
+})

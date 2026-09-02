@@ -28,6 +28,7 @@ test('renders every result variant for a frame and downloads a selection', async
     <SceneWorkspace
       scene={scene}
       jobs={[]}
+      loading={false}
       onDelete={vi.fn().mockResolvedValue(undefined)}
       frames={[
         {
@@ -84,6 +85,7 @@ test('shows download progress, disables the button, and reports an archive error
     <SceneWorkspace
       scene={scene}
       jobs={[]}
+      loading={false}
       onDelete={vi.fn().mockResolvedValue(undefined)}
       frames={[{ frame: 12, results: [{ id: 'result-cpu', scene_id: scene.id, job_id: 'job-1', frame: 12, pod_id: 'pod-cpu', backend: 'CPU', hardware: ['AMD EPYC'], samples: 32, render_seconds: 8.4, completed_at: '2026-01-01T00:01:00Z' }] }]}
     />,
@@ -96,4 +98,19 @@ test('shows download progress, disables the button, and reports an archive error
   rejectDownload(new Error('Archive service is unavailable'))
   await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Archive service is unavailable'))
   expect(screen.getByRole('button', { name: 'Download all' })).toBeEnabled()
+})
+
+test('shows a loading state instead of stale or empty results', () => {
+  render(
+    <SceneWorkspace
+      scene={scene}
+      jobs={[]}
+      loading
+      onDelete={vi.fn().mockResolvedValue(undefined)}
+      frames={[]}
+    />,
+  )
+
+  expect(screen.getByRole('status')).toHaveTextContent('Loading scene results…')
+  expect(screen.queryByText('Rendered frames from every pod will appear here.')).not.toBeInTheDocument()
 })

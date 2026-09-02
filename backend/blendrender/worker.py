@@ -15,7 +15,7 @@ from .models import TERMINAL_STATUSES, FrameResult, Job, JobStatus, RenderConfig
 from .progress import estimate_remaining_seconds, overall_progress, parse_renderer_line
 from .workspace import WorkspaceStore
 
-LOG_TAIL_LIMIT = 12_000
+LOG_TAIL_LINE_LIMIT = 120
 ELAPSED_UPDATE_INTERVAL_SECONDS = 1.0
 
 
@@ -25,6 +25,11 @@ def frame_filename(frame: int) -> str:
 
 def preview_filename(frame: int) -> str:
     return f"frame_{frame:06d}.webp"
+
+
+def append_log_tail(log_tail: str, line: str) -> str:
+    """Return the most recent complete log lines, preserving line endings."""
+    return "".join((log_tail + line).splitlines(keepends=True)[-LOG_TAIL_LINE_LIMIT:])
 
 
 def verify_png(path: Path) -> bool:
@@ -219,7 +224,7 @@ class RenderWorker:
                     line = raw_line.decode(errors="replace")
                     log_file.write(line)
                     log_file.flush()
-                    log_tail = (log_tail + line)[-LOG_TAIL_LIMIT:]
+                    log_tail = append_log_tail(log_tail, line)
                     parsed = parse_renderer_line(line)
                     if parsed.event:
                         event_type = parsed.event.get("type")

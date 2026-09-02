@@ -3,7 +3,15 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-from blendrender.worker import blender_command
+from blendrender.worker import append_log_tail, blender_command
+
+
+def test_append_log_tail_retains_the_latest_120_lines() -> None:
+    log_tail = ""
+    for line_number in range(1, 122):
+        log_tail = append_log_tail(log_tail, f"line {line_number}\n")
+
+    assert log_tail.splitlines() == [f"line {line_number}" for line_number in range(2, 122)]
 
 
 def test_blender_command_omits_flip_fluids_bootstrap_when_disabled(settings) -> None:

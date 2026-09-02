@@ -2,7 +2,7 @@ from blendrender.progress import estimate_remaining_seconds, overall_progress, p
 
 
 def test_parses_machine_event() -> None:
-    parsed = parse_renderer_line('BLENDRENDER_EVENT {"type":"frame_started","frame":12}\n')
+    parsed = parse_renderer_line('BR {"type":"frame_started","frame":12}\n')
     assert parsed.event == {"type": "frame_started", "frame": 12}
 
 

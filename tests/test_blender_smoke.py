@@ -115,9 +115,9 @@ bpy.ops.wm.save_as_mainfile(filepath=arguments[1])
         timeout=120,
     )
 
-    assert 'BLENDRENDER_EVENT {"type": "frame_started", "frame": 1}' in completed.stdout
-    assert 'BLENDRENDER_EVENT {"type": "frame_progress", "frame": 1' in completed.stdout
-    assert 'BLENDRENDER_EVENT {"type": "frame_completed", "frame": 1' in completed.stdout
+    assert 'BR {"type": "frame_started", "frame": 1}' in completed.stdout
+    assert 'BR {"type": "frame_progress", "frame": 1' in completed.stdout
+    assert 'BR {"type": "frame_completed", "frame": 1' in completed.stdout
     output = output_dir / frame_filename(1)
     with Image.open(output) as image:
         assert image.format == "PNG"

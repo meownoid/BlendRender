@@ -13,7 +13,7 @@ from pathlib import Path
 
 import bpy
 
-PREFIX = "BLENDRENDER_EVENT "
+PREFIX = "BR "
 SAMPLE_PATTERN = re.compile(r"Sample\s+(\d+)\s*/\s*(\d+)")
 REMAINING_PATTERN = re.compile(r"Remaining:\s+(?:(\d+):)?(\d+):(\d+(?:\.\d+)?)")
 
