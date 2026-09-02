@@ -34,8 +34,19 @@ share scenes and render in parallel.
 For parallel rendering, attach the same volume to additional Pods running the same image version
 and password. Each Pod renders its own jobs, one at a time; all dashboards share scenes and results.
 
+## Prepare a scene
+
+- Upload a `.blend` with images packed, or a ZIP containing exactly one `.blend` and its external
+  image resources. Use Blender-relative paths for unpacked resources.
+- Make linked library data local, set an active camera, and bake simulations before upload. Include
+  supported simulation caches in the project ZIP.
+- BlendRender currently supports image output only.
+- Third-party Blender add-ons are not supported on the render Pods. The bundled FLIP Fluids Demo is
+  the only add-on provided by the production image.
+
 See [Deployment](docs/deployment.md) for storage requirements and configuration. BlendRender is
-designed for trusted users; read [Security](docs/security.md) before exposing it.
+designed for trusted users; read [Security](docs/security.md) before exposing it. See
+[Scene preparation and rendering](docs/rendering.md) for details.
 
 ## Documentation
 

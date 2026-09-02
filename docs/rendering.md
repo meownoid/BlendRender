@@ -2,8 +2,8 @@
 
 ## Prepare a scene
 
-- Upload a `.blend` with images and sounds packed, or a ZIP containing exactly one `.blend` and its
-  external resources.
+- Upload a `.blend` with images packed, or a ZIP containing exactly one `.blend` and its external
+  image resources.
 - Use Blender-relative paths for unpacked resources. ZIPs preserve folders; BlendRender does not
   rewrite paths or locate missing files.
 - Make linked library data local: separate `.blend` libraries are not allowed in project ZIPs.
@@ -14,8 +14,10 @@ Uploads create reusable scenes without starting a render. Select the scene and c
 to create a job. Upload a new scene when the source changes; see the
 [S3 guide](s3-guide.md#replace-scene-source-files) for offline source replacement.
 
-The renderer checks unpacked images, libraries, and sounds for missing or out-of-project paths.
-Other dependencies, including fonts, add-ons, and simulation caches, may still fail at render time.
+The renderer checks unpacked images and libraries for missing or out-of-project paths. Other
+dependencies, including fonts, add-ons, and simulation caches, may still fail at render time.
+Third-party Blender add-ons are not supported on render Pods; the production image provides only
+the bundled FLIP Fluids Demo add-on described below.
 
 ## FLIP Fluids
 
@@ -28,9 +30,10 @@ scene opens. Demo-baked caches retain their watermark; Mixbox color blending is 
 The active scene supplies the camera, denoising, compositor, and color management. Samples,
 resolution, resolution percentage, and Cycles tile size use scene settings unless overridden.
 
-Every job uses Cycles, the selected backend and frame sequence, and PNG output. The dashboard
-supports OptiX, CUDA, and CPU when available on the Pod. Samples, tile size, and resolution can be
-adjusted per job; see [API limits](api.md#jobs).
+Every job uses Cycles, the selected backend and frame sequence, and PNG image output. Image output
+is currently the only supported result type. The dashboard supports OptiX, CUDA, and CPU when
+available on the Pod. Samples, tile size, and resolution can be adjusted per job; see
+[API limits](api.md#jobs).
 
 Blender runs in background mode with `--disable-autoexec` and `--python-exit-code 1`. Only the
 configured trusted bootstrap and render scripts are explicitly launched; uploaded embedded Python

@@ -3,6 +3,23 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { vi } from 'vitest'
 import { UploadScenePanel } from './UploadScenePanel'
 
+test('explains how to prepare a scene and the add-on limitation', () => {
+  render(
+    <UploadScenePanel
+      open
+      busy={false}
+      progress={null}
+      onClose={vi.fn()}
+      onUpload={vi.fn()}
+    />,
+  )
+
+  expect(screen.getByRole('heading', { name: 'Prepare your scene' })).toBeVisible()
+  expect(screen.getByText(/Pack images into the/i)).toBeVisible()
+  expect(screen.getByText('Only image output is currently supported.')).toBeVisible()
+  expect(screen.getByText(/Third-party Blender add-ons are not supported/i)).toBeVisible()
+})
+
 test('submits an optional scene name with the selected file', async () => {
   const onUpload = vi.fn().mockResolvedValue(undefined)
   const { container } = render(

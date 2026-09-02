@@ -49,6 +49,15 @@ export function UploadScenePanel({ open, busy, progress, onClose, onCancel, onUp
   const byteProgress = progress?.total == null ? null : `${formatBytes(progress.loaded)} / ${formatBytes(progress.total)}`
   return <aside className="side-panel" aria-label="Upload scene">
     <header><h2>Upload scene</h2><button className="icon-button" onClick={onClose} disabled={busy}><X /></button></header>
+    <section className="upload-guidance" aria-labelledby="upload-guidance-title">
+      <h3 id="upload-guidance-title">Prepare your scene</h3>
+      <ul>
+        <li>Pack images into the `.blend`, or use a ZIP with one `.blend` and relative image resources.</li>
+        <li>Make linked library data local, set an active camera, and include baked simulation caches.</li>
+        <li>Only image output is currently supported.</li>
+        <li>Third-party Blender add-ons are not supported. Only the bundled FLIP Fluids Demo is available.</li>
+      </ul>
+    </section>
     <button
       className={`dropzone${file ? ' has-file' : ''}${dragging ? ' is-dragging' : ''}`}
       onClick={() => inputRef.current?.click()}
