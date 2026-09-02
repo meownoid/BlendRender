@@ -93,6 +93,8 @@ class ObjectUploader(Protocol):
 
     def list_object_sizes(self, prefix: PurePosixPath) -> dict[PurePosixPath, int]: ...
 
+    def read_json(self, key: PurePosixPath) -> dict[str, object]: ...
+
     def upload_file(self, source: Path, key: PurePosixPath) -> None: ...
 
     def upload_json(self, payload: dict[str, object], key: PurePosixPath) -> None: ...
@@ -118,6 +120,8 @@ class S3Client(Protocol):
     def list_multipart_uploads(self, *, Bucket: str, **kwargs: object) -> dict[str, Any]: ...
 
     def list_objects_v2(self, *, Bucket: str, **kwargs: object) -> dict[str, Any]: ...
+
+    def get_object(self, *, Bucket: str, Key: str) -> dict[str, Any]: ...
 
     def put_object(
         self, *, Bucket: str, Key: str, Body: object, **kwargs: object
@@ -234,6 +238,43 @@ class Boto3Uploader:
                     "RunPod S3 returned a truncated object listing without a continuation token"
                 )
             continuation_token = next_token
+
+    def read_json(self, key: PurePosixPath) -> dict[str, object]:
+        try:
+            response = self._request_with_retry(
+                f"download {key}",
+                lambda: self._client.get_object(Bucket=self.settings.volume_id, Key=key.as_posix()),
+            )
+        except ClientError as exc:
+            raise _s3_error(f"download {key}", exc) from exc
+        except BotoCoreError as exc:
+            raise _s3_error(f"download {key}", exc) from exc
+
+        content = response.get("Body")
+        read = getattr(content, "read", None)
+        if not callable(read):
+            raise RunpodScenePreparationError(
+                f"RunPod S3 returned an invalid JSON object for {key}"
+            )
+        try:
+            raw = read()
+        finally:
+            close = getattr(content, "close", None)
+            if callable(close):
+                close()
+        if not isinstance(raw, bytes):
+            raise RunpodScenePreparationError(
+                f"RunPod S3 returned an invalid JSON object for {key}"
+            )
+        try:
+            payload = json.loads(raw)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise RunpodScenePreparationError(f"RunPod S3 returned invalid JSON for {key}") from exc
+        if not isinstance(payload, dict):
+            raise RunpodScenePreparationError(
+                f"RunPod S3 returned an invalid JSON object for {key}"
+            )
+        return cast(dict[str, object], payload)
 
     def upload_file(self, source: Path, key: PurePosixPath) -> None:
         size_bytes = source.stat().st_size
@@ -778,8 +819,9 @@ def prepare_scene(
     *,
     scene_id: str | None = None,
     scene_name: str | None = None,
+    overwrite: bool = False,
 ) -> PreparedScene:
-    """Upload a local BlendRender scene and publish its manifest last."""
+    """Upload a local BlendRender scene, or replace supplied source files in an existing scene."""
 
     source_path = local_path.expanduser().resolve()
     if not source_path.is_file():
@@ -792,6 +834,13 @@ def prepare_scene(
     suffix = source_path.suffix.lower()
     if suffix not in {".blend", ".zip"}:
         raise RunpodScenePreparationError("Only .blend files and project ZIP archives are accepted")
+
+    if overwrite and scene_id is None:
+        raise RunpodScenePreparationError("--overwrite requires --scene-id")
+    if overwrite and scene_name is not None:
+        raise RunpodScenePreparationError(
+            "--overwrite preserves the existing scene name; omit --name"
+        )
 
     identifier = _scene_id(scene_id)
     name = _scene_name(scene_name, source_path.name)
@@ -806,7 +855,24 @@ def prepare_scene(
     else:
         logger.info("Preparing scene %s", identifier)
     uploader.ensure_volume()
-    if uploader.object_exists(scene_manifest_key):
+    scene_exists = uploader.object_exists(scene_manifest_key)
+    if overwrite:
+        if not scene_exists:
+            raise RunpodScenePreparationError(
+                f"Scene {identifier} is not complete on the network volume; "
+                "remove --overwrite to prepare it"
+            )
+        existing_scene = _read_scene_manifest(uploader, scene_manifest_key, identifier)
+        with _prepared_source(source_path, settings.max_upload_bytes) as prepared:
+            overwrite_files = _overwrite_source_files(prepared, existing_scene, scene_root)
+            _upload_files_concurrently(uploader, overwrite_files)
+        return PreparedScene(
+            id=existing_scene.id,
+            name=existing_scene.name,
+            entrypoint=existing_scene.entrypoint,
+        )
+
+    if scene_exists:
         raise RunpodScenePreparationError(
             f"Scene {identifier} is already complete on the network volume; "
             "choose a different --scene-id"
@@ -878,6 +944,46 @@ class _PreparedSource:
     source_kind: Literal["blend", "zip"]
     entrypoint: str
     files: tuple[tuple[Path, PurePosixPath], ...]
+
+
+def _read_scene_manifest(
+    uploader: ObjectUploader, key: PurePosixPath, expected_id: str
+) -> SceneManifest:
+    try:
+        scene = SceneManifest.model_validate(uploader.read_json(key))
+    except ValueError as exc:
+        raise RunpodScenePreparationError(f"Scene {expected_id} has an invalid manifest") from exc
+    if scene.id != expected_id:
+        raise RunpodScenePreparationError(f"Scene {expected_id} has a mismatched manifest ID")
+    return scene
+
+
+def _overwrite_source_files(
+    prepared: _PreparedSource, existing_scene: SceneManifest, scene_root: PurePosixPath
+) -> tuple[tuple[Path, PurePosixPath], ...]:
+    entrypoint = PurePosixPath(existing_scene.entrypoint)
+    if entrypoint.is_absolute() or not entrypoint.parts or ".." in entrypoint.parts:
+        raise RunpodScenePreparationError(
+            f"Scene {existing_scene.id} has an unsafe manifest entrypoint"
+        )
+
+    if prepared.source_kind == "blend":
+        local_file, _ = prepared.files[0]
+        return ((local_file, scene_root / "source" / entrypoint),)
+
+    if prepared.source_kind != existing_scene.source_kind:
+        raise RunpodScenePreparationError(
+            "A project ZIP can overwrite only a scene that was originally uploaded as a project ZIP"
+        )
+    if prepared.entrypoint != existing_scene.entrypoint:
+        raise RunpodScenePreparationError(
+            "The project ZIP blend path must match the existing scene entrypoint "
+            f"({existing_scene.entrypoint})"
+        )
+    return tuple(
+        (local_file, scene_root / "source" / relative_path)
+        for local_file, relative_path in prepared.files
+    )
 
 
 @contextmanager

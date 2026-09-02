@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
+from io import BytesIO
 from pathlib import Path, PurePosixPath
 from threading import Barrier, Event, Lock
 
@@ -25,9 +26,11 @@ class RecordingUploader:
         self,
         existing: dict[PurePosixPath, int] | None = None,
         *,
+        existing_json: dict[PurePosixPath, dict[str, object]] | None = None,
         upload_workers: int = 8,
     ) -> None:
         self.existing = existing or {}
+        self.existing_json = existing_json or {}
         self.upload_workers = upload_workers
         self.checked: list[PurePosixPath] = []
         self.uploads: list[tuple[str, PurePosixPath, bytes | dict[str, object]]] = []
@@ -43,6 +46,9 @@ class RecordingUploader:
 
     def list_object_sizes(self, prefix: PurePosixPath) -> dict[PurePosixPath, int]:
         return {key: size for key, size in self.existing.items() if key.is_relative_to(prefix)}
+
+    def read_json(self, key: PurePosixPath) -> dict[str, object]:
+        return self.existing_json[key]
 
     def upload_file(self, source: Path, key: PurePosixPath) -> None:
         upload = ("file", key, source.read_bytes())
@@ -116,6 +122,9 @@ class RecordingS3Client:
 
     def head_object(self, *, Bucket: str, Key: str) -> dict[str, object]:
         return {"ContentLength": len(self.objects[Key])}
+
+    def get_object(self, *, Bucket: str, Key: str) -> dict[str, object]:
+        return {"Body": BytesIO(self.objects[Key])}
 
     def list_objects_v2(self, *, Bucket: str, Prefix: str, MaxKeys: int) -> dict[str, object]:
         return {"Contents": []}
@@ -336,6 +345,50 @@ def test_prepare_scene_does_not_overwrite_an_existing_scene(
     assert uploader.uploads == []
 
 
+def test_prepare_scene_overwrite_replaces_only_the_existing_scene_blend(
+    tmp_path: Path, runpod_settings: RunpodS3Settings
+) -> None:
+    source = tmp_path / "updated.blend"
+    source.write_bytes(b"new blend")
+    scene_id = "00000000-0000-4000-8000-000000000409"
+    scene_root = PurePosixPath(f"blendrender/scenes/{scene_id}")
+    manifest_key = scene_root / "manifest.json"
+    entrypoint = "project/scenes/main.blend"
+    texture_key = scene_root / "source/project/textures/sky.png"
+    uploader = RecordingUploader(
+        {manifest_key: 1, texture_key: 3},
+        existing_json={
+            manifest_key: {
+                "schema_version": 2,
+                "id": scene_id,
+                "filename": "main.blend",
+                "name": "Exterior",
+                "source_kind": "zip",
+                "entrypoint": entrypoint,
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "size_bytes": 123,
+            }
+        },
+    )
+
+    prepared = prepare_scene(source, runpod_settings, uploader, scene_id=scene_id, overwrite=True)
+
+    assert prepared == PreparedScene(id=scene_id, name="Exterior", entrypoint=entrypoint)
+    assert uploader.uploads == [
+        ("file", scene_root / "source" / entrypoint, b"new blend"),
+    ]
+
+
+def test_prepare_scene_overwrite_requires_a_scene_id(
+    tmp_path: Path, runpod_settings: RunpodS3Settings
+) -> None:
+    source = tmp_path / "hero.blend"
+    source.write_bytes(b"blend")
+
+    with pytest.raises(RunpodScenePreparationError, match="--overwrite requires --scene-id"):
+        prepare_scene(source, runpod_settings, RecordingUploader(), overwrite=True)
+
+
 def test_prepare_scene_resumes_and_skips_matching_existing_files(
     caplog: pytest.LogCaptureFixture,
     tmp_path: Path,
@@ -497,6 +550,18 @@ def test_boto3_uploader_logs_direct_file_uploads(
         in caplog.messages
     )
     assert "Uploaded blendrender/scenes/small/source/input.blend" in caplog.messages
+
+
+def test_boto3_uploader_reads_a_json_object(
+    monkeypatch: pytest.MonkeyPatch, runpod_settings: RunpodS3Settings
+) -> None:
+    client = RecordingS3Client()
+    key = "blendrender/scenes/scene/manifest.json"
+    client.objects[key] = b'{"id":"scene"}'
+    uploader = Boto3Uploader(runpod_settings)
+    monkeypatch.setattr(uploader, "_client", client)
+
+    assert uploader.read_json(PurePosixPath(key)) == {"id": "scene"}
 
 
 def test_boto3_uploader_lists_all_existing_object_sizes(

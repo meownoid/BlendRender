@@ -6,7 +6,10 @@ job, and result catalog from `/workspace/blendrender`.
 
 ## Domain model
 
-- A **scene** is an immutable `.blend` upload or safely extracted project ZIP.
+- A **scene** consists of a `.blend` upload or safely extracted project ZIP and an immutable
+  manifest. Normal uploads and S3 preparation create immutable sources. The RunPod S3 preparation
+  tool has an explicit, offline-only `--overwrite` mode for replacing supplied source files while
+  retaining omitted resources and the immutable scene manifest.
 - A **job** references one scene, records render settings, and is permanently owned by the Pod that
   created it. Only that Pod can render, cancel, retry, or delete the job.
 - A **result** is an immutable frame render. It belongs to a scene and records its job, pod,

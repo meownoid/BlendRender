@@ -88,9 +88,9 @@ leaves it unset unless the same compatible add-on is installed locally.
 ## Preload a scene through RunPod's S3 API
 
 Use `scripts/prepare_runpod_scene.py` to make a local `.blend` or project ZIP appear as a completed
-immutable BlendRender scene before starting a Pod. The script validates input using the same project
-ZIP rules as normal uploads, writes all source files under the configured workspace, and uploads the
-scene manifest only after every source file is present. A Pod therefore sees either no scene or a
+BlendRender scene before starting a Pod. The script validates input using the same project ZIP rules
+as normal uploads, writes all source files under the configured workspace, and uploads the scene
+manifest only after every source file is present. A Pod therefore sees either no scene or a
 render-ready one.
 
 Run it while no BlendRender Pod is writing to the network volume. This direct S3 workflow bypasses
@@ -117,7 +117,24 @@ The script logs the generated scene ID before transferring files and prints it a
 If a run is interrupted, rerun the same input with that ID via `--scene-id`; the script inventories
 the unfinished scene and skips source files whose paths and byte sizes already match. It refuses to
 resume when an existing file differs, an unexpected object is present, or the final scene manifest
-has already been published. It never overwrites a completed scene.
+has already been published. By default, it never overwrites a completed scene.
+
+To replace only supplied source files in a completed scene, add `--overwrite` with its existing
+`--scene-id`. No source files omitted from the command are deleted, and the scene manifest, jobs,
+and existing render results are also left intact. Passing a standalone `.blend` replaces the
+existing scene's recorded blend entrypoint, even when the original scene was uploaded as a project
+ZIP; this is the usual way to update a blend while retaining its textures, caches, and other assets.
+For a ZIP update, its `.blend` must remain at the same relative path as the original entrypoint.
+
+```bash
+uv run python scripts/prepare_runpod_scene.py /path/to/updated.blend \
+  --scene-id 'EXISTING_SCENE_UUID' \
+  --overwrite
+```
+
+`--overwrite` is deliberately an operator-only exception to scene-source immutability. Run it only
+while no BlendRender Pod is writing to or rendering from that scene. Existing render results are not
+deleted, so download or otherwise distinguish older results before rendering the updated source.
 
 Source files upload concurrently, largest first, through a bounded pool of eight S3 requests by
 default. Set `--upload-workers` from 1 through 16 to tune the pool for the local connection and

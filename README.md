@@ -32,8 +32,9 @@ The shared catalog defaults to `/workspace/blendrender`. Read [Deployment](docs/
 
 To place a scene on the shared volume before starting a Pod, use the
 [RunPod S3 preparation script](docs/deployment.md#preload-a-scene-through-runpods-s3-api), which
-supports resumable, bounded concurrent file transfers. The same guide also documents a
-confirmation-guarded script to clear a network volume.
+supports resumable, bounded concurrent file transfers and opt-in replacement of supplied source
+files such as an updated `.blend`. The same guide also documents a confirmation-guarded script to
+clear a network volume.
 
 ## Local development
 

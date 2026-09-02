@@ -40,6 +40,15 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help=(
+            "Replace only source files supplied by this command in an existing completed scene; "
+            "requires --scene-id and preserves other source files, the scene manifest, jobs, "
+            "and results"
+        ),
+    )
+    parser.add_argument(
         "--upload-workers",
         type=int,
         default=DEFAULT_UPLOAD_WORKERS,
@@ -59,6 +68,7 @@ def main() -> None:
             Boto3Uploader(settings, upload_workers=args.upload_workers),
             scene_id=args.scene_id,
             scene_name=args.name,
+            overwrite=args.overwrite,
         )
     except RunpodScenePreparationError as exc:
         raise SystemExit(f"Scene preparation failed: {exc}") from exc

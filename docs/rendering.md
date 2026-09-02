@@ -11,8 +11,9 @@
 - Make linked library data local. Project ZIPs intentionally allow only one `.blend`, so separate
   library files are rejected.
 - Configure an active camera in the active scene.
-- Completing a resumable upload creates an immutable scene; choose a frame or range only when
-  creating a later job.
+- Completing a resumable dashboard upload creates an immutable scene; choose a frame or range only
+  when creating a later job. The offline RunPod S3 preparation tool has a documented `--overwrite`
+  exception for replacing supplied source files in an existing scene.
 
 The renderer explicitly detects missing, absolute, and out-of-project unpacked file-backed images,
 libraries, and sounds. Production images bundle the public FLIP Fluids Demo v1.8.8 add-on and load
