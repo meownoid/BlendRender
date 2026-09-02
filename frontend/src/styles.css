@@ -330,7 +330,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .job-table__row:hover, .job-table__row:focus-visible, .job-table__row.is-selected { background: #1a2228; }
 .job-table__row:focus-visible { box-shadow: inset 3px 0 0 var(--accent); }
 .job-details-row td { padding: 0; white-space: normal; }
-.job-details { display: grid; gap: 14px; padding: 18px 22px; border-left: 3px solid var(--accent); background: #161d22; }
+.job-details { display: grid; gap: 14px; padding: 18px 14px 18px 11px; border-left: 3px solid var(--accent); background: #161d22; }
 .job-details h2, .job-details p { margin: 0; }
 .job-details h2 { font-size: 14px; }
 .job-details p { margin-top: 5px; color: var(--muted); overflow-wrap: anywhere; }
