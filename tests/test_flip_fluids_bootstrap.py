@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import runpy
 import sys
 import types
@@ -27,6 +28,17 @@ class FakeLibraries(list[object]):
     def remove(self, library: object, *, do_unlink: bool) -> None:
         assert not do_unlink
         super().remove(library)
+
+
+def load_renderer_module(monkeypatch, bpy: types.ModuleType):
+    script = Path(__file__).parents[1] / "renderer" / "blendrender_render.py"
+    spec = importlib.util.spec_from_file_location("blendrender_render_under_test", script)
+    assert spec is not None
+    assert spec.loader is not None
+    renderer = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, "bpy", bpy)
+    spec.loader.exec_module(renderer)
+    return renderer
 
 
 def test_flip_fluids_bootstrap_replaces_a_scene_saved_material_library_path(
@@ -119,3 +131,45 @@ def test_flip_fluids_bootstrap_replaces_a_scene_saved_material_library_path(
     library.library_path = "/Users/artist/Library/Application Support/Blender/material_library"
     handlers.load_post[0](None)
     assert library.initialized_paths == [expected_path, expected_path]
+
+
+def test_asset_validation_ignores_only_bundled_flip_material_libraries(monkeypatch) -> None:
+    addon = types.ModuleType("flip_fluids_addon")
+    addon.__path__ = []
+    materials = types.ModuleType("flip_fluids_addon.materials")
+    materials.__path__ = []
+    material_library = types.ModuleType("flip_fluids_addon.materials.material_library")
+    material_library.__file__ = (
+        "/opt/blender/5.2/scripts/addons_core/flip_fluids_addon/materials/material_library.py"
+    )
+    addon.materials = materials
+    materials.material_library = material_library
+    for name, module in {
+        "flip_fluids_addon": addon,
+        "flip_fluids_addon.materials": materials,
+        "flip_fluids_addon.materials.material_library": material_library,
+    }.items():
+        monkeypatch.setitem(sys.modules, name, module)
+    monkeypatch.setenv("FLIP_FLUIDS_ADDON", "flip_fluids_addon")
+
+    bpy = types.ModuleType("bpy")
+    bpy.data = types.SimpleNamespace(
+        images=[],
+        libraries=[
+            types.SimpleNamespace(
+                filepath=(
+                    "/opt/blender/5.2/scripts/addons_core/flip_fluids_addon/materials/"
+                    "material_library/surface/FF Apple Juice.blend"
+                )
+            ),
+            types.SimpleNamespace(filepath="/outside-project/scene_library.blend"),
+        ],
+        sounds=[],
+    )
+    bpy.path = types.SimpleNamespace(abspath=lambda filepath: filepath)
+
+    renderer = load_renderer_module(monkeypatch, bpy)
+
+    assert renderer.unavailable_external_assets(Path("/workspace/project")) == [
+        "linked library uses an absolute path: /outside-project/scene_library.blend"
+    ]

@@ -89,3 +89,33 @@ test('validates an empty frame field after it loses focus', () => {
   fireEvent.blur(start)
   expect(screen.getByText('Start frame must be an integer.')).toBeVisible()
 })
+
+test('validates the resolution scale before submitting the render', async () => {
+  const onSubmit = vi.fn().mockResolvedValue(undefined)
+  render(
+    <NewJobPanel
+      open
+      scene={{
+        id: 'scene-1',
+        filename: 'city.blend',
+        name: 'City at night',
+        source_kind: 'blend',
+        entrypoint: 'city.blend',
+        created_at: '2026-01-01T00:00:00Z',
+        size_bytes: 100,
+        job_count: 0,
+        result_count: 0,
+      }}
+      system={null}
+      busy={false}
+      onClose={vi.fn()}
+      onSubmit={onSubmit}
+    />,
+  )
+
+  fireEvent.change(screen.getByLabelText('Resolution scale (optional)'), { target: { value: '4096' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Create job' }))
+
+  expect(await screen.findByText('Resolution scale must be a whole number between 1 and 100.')).toBeVisible()
+  expect(onSubmit).not.toHaveBeenCalled()
+})

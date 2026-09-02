@@ -17,6 +17,17 @@ export class ApiError extends Error {
   }
 }
 
+const fieldLabels: Record<string, string> = {
+  frame: 'Frame',
+  start: 'Start frame',
+  end: 'End frame',
+  samples: 'Samples',
+  tile_size: 'Tile size',
+  resolution_x: 'Width',
+  resolution_y: 'Height',
+  resolution_percentage: 'Resolution scale',
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     credentials: 'same-origin',
@@ -24,8 +35,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: init?.body instanceof FormData ? init.headers : { 'Content-Type': 'application/json', ...init?.headers },
   })
   if (!response.ok) {
-    const payload = await response.json().catch(() => null)
-    throw new ApiError(payload?.detail ?? `Request failed (${response.status})`, response.status)
+    const payload = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new ApiError(formatErrorDetail(payload?.detail, response.status), response.status)
   }
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
@@ -34,10 +45,31 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 function responseError(response: XMLHttpRequest): ApiError {
   try {
     const payload = JSON.parse(response.responseText) as { detail?: unknown }
-    return new ApiError(typeof payload.detail === 'string' ? payload.detail : `Request failed (${response.status})`, response.status)
+    return new ApiError(formatErrorDetail(payload.detail, response.status), response.status)
   } catch {
     return new ApiError(`Request failed (${response.status})`, response.status)
   }
+}
+
+function formatErrorDetail(detail: unknown, status: number): string {
+  if (typeof detail === 'string' && detail) return detail
+  if (!Array.isArray(detail)) return `Request failed (${status})`
+
+  const messages = detail.flatMap((issue) => {
+    if (!isRecord(issue) || typeof issue.msg !== 'string') return []
+    const loc = issue.loc
+    const field = Array.isArray(loc)
+      ? loc.reduce<string | undefined>((current, part: unknown) => (
+        typeof part === 'string' && part !== 'body' ? part : current
+      ), undefined)
+      : undefined
+    return [`${field == null ? 'Request' : fieldLabels[field] ?? field}: ${issue.msg}`]
+  })
+  return messages.length ? messages.join(' ') : `Request failed (${status})`
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
 }
 
 interface UploadOptions {

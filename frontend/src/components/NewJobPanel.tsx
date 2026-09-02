@@ -38,6 +38,15 @@ export function NewJobPanel({ open, scene, system, busy, onClose, onSubmit }: Ne
     setError(parseFrame(value) === null ? `${label} must be an integer.` : '')
   }
 
+  function validateOptionalInteger(value: string, label: string, min: number, max: number): string | null {
+    if (!value) return null
+    const parsed = Number(value)
+    if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
+      return `${label} must be a whole number between ${min.toLocaleString()} and ${max.toLocaleString()}.`
+    }
+    return null
+  }
+
   async function submit() {
     if (!scene) return setError('Select a scene first.')
     const parsedFrame = parseFrame(frame)
@@ -49,6 +58,14 @@ export function NewJobPanel({ open, scene, system, busy, onClose, onSubmit }: Ne
     }
     if (mode === 'range' && parsedStart > parsedEnd) return setError('Start frame must not exceed end frame.')
     if (Boolean(resolutionX) !== Boolean(resolutionY)) return setError('Width and height must be provided together.')
+    const optionalFieldError = [
+      validateOptionalInteger(samples, 'Samples', 1, 1_000_000),
+      validateOptionalInteger(tileSize, 'Tile size', 8, 8_192),
+      validateOptionalInteger(resolutionX, 'Width', 4, 65_536),
+      validateOptionalInteger(resolutionY, 'Height', 4, 65_536),
+      validateOptionalInteger(resolutionPercentage, 'Resolution scale', 1, 100),
+    ].find((message) => message != null)
+    if (optionalFieldError) return setError(optionalFieldError)
     try {
       setError('')
       await onSubmit({

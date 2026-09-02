@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import importlib
 import json
+import os
 import re
 import sys
 import time
@@ -29,8 +31,23 @@ def config_path() -> Path:
     return Path(arguments[0]).resolve()
 
 
+def bundled_flip_material_library() -> Path | None:
+    module = os.getenv("FLIP_FLUIDS_ADDON", "").strip()
+    if not module:
+        return None
+    try:
+        material_library = importlib.import_module(f"{module}.materials.material_library")
+    except ModuleNotFoundError:
+        return None
+    library_file = getattr(material_library, "__file__", None)
+    if not library_file:
+        return None
+    return (Path(library_file).resolve().parent / "material_library").resolve()
+
+
 def unavailable_external_assets(project_root: Path) -> list[str]:
     unavailable: list[str] = []
+    material_library = bundled_flip_material_library()
 
     def validate(kind: str, filepath: str) -> None:
         if not filepath.startswith("//"):
@@ -47,6 +64,9 @@ def unavailable_external_assets(project_root: Path) -> list[str]:
             validate("image", image.filepath)
     for library in bpy.data.libraries:
         if library.filepath:
+            library_path = Path(bpy.path.abspath(library.filepath)).resolve()
+            if material_library is not None and library_path.is_relative_to(material_library):
+                continue
             validate("linked library", library.filepath)
     for sound in bpy.data.sounds:
         if not sound.packed_file and sound.filepath:
@@ -165,9 +185,10 @@ def run() -> None:
     emit("job_completed", rendered_frames=frames)
 
 
-try:
-    run()
-except Exception as exc:
-    emit("error", message=str(exc))
-    traceback.print_exc()
-    raise
+if __name__ == "__main__":
+    try:
+        run()
+    except Exception as exc:
+        emit("error", message=str(exc))
+        traceback.print_exc()
+        raise
