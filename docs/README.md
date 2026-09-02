@@ -1,16 +1,15 @@
 # BlendRender documentation
 
-The root [README](../README.md) is the short product and setup overview. Use the topic guides below
-for implementation and operational detail.
+Start with the [quick start](../README.md#runpod-quick-start), then choose a guide:
 
 | Topic | Use it for |
 | --- | --- |
-| [Architecture](architecture.md) | Understanding component boundaries, request flow, data layout, and job states |
-| [API](api.md) | Calling the HTTP API and checking field constraints or response shapes |
-| [Development and testing](development.md) | Preparing a workstation, running services, and choosing verification commands |
-| [Deployment and operations](deployment.md) | Building the image, managing RunPod S3 scene data, and diagnosing health |
-| [Security](security.md) | Understanding the trust model, authentication, and file handling |
-| [Rendering](rendering.md) | Preparing scenes and FLIP caches, plus Blender tile-size, resolution, and other overrides |
+| [Rendering](rendering.md) | Prepare scenes, choose settings, and download results |
+| [Deployment and operations](deployment.md) | Build an image, configure Pods, and check health |
+| [RunPod S3 scripts](s3-guide.md) | Upload, download, replace, or delete volume data from the command line |
+| [HTTP API](api.md) | Authenticate, upload scenes, and manage renders programmatically |
+| [Security](security.md) | Understand access, file handling, and isolation limits |
+| [Development and testing](development.md) | Set up a workstation and run checks |
+| [Architecture](architecture.md) | Understand job ownership, storage, and recovery |
 
-Repository-specific instructions for contributors and coding agents are in
-[AGENTS.md](../AGENTS.md).
+Contributor and coding-agent instructions are in [AGENTS.md](../AGENTS.md).
