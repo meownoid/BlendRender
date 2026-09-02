@@ -61,8 +61,8 @@ export function UploadScenePanel({ open, busy, progress, onClose, onCancel, onUp
       <strong>{dragging ? 'Drop file here' : (file?.name ?? 'Choose a .blend or project ZIP')}</strong>
       <span>{file ? formatBytes(file.size) : 'ZIPs need one .blend and relative resources.'}</span>
     </button>
-    <input className="visually-hidden" ref={inputRef} type="file" accept=".blend,.zip" onChange={(event) => choose(event.target.files?.[0])} />
-    <label className="field"><span>Name (optional)</span><input value={name} maxLength={200} placeholder={file?.name ?? 'Uses the uploaded file name'} onChange={(event) => setName(event.target.value)} disabled={busy} /></label>
+    <input className="visually-hidden" ref={inputRef} type="file" accept=".blend,.zip" data-1p-ignore="true" onChange={(event) => choose(event.target.files?.[0])} />
+    <label className="field"><span>Name (optional)</span><input data-1p-ignore="true" value={name} maxLength={200} placeholder={file?.name ?? 'Uses the uploaded file name'} onChange={(event) => setName(event.target.value)} disabled={busy} /></label>
     {busy ? <div className="upload-progress"><div className="upload-progress__labels"><strong>{label}</strong>{byteProgress ? <span>{byteProgress}</span> : null}</div><div className="progress-track"><span style={{ width: `${processing ? 35 : percent ?? 35}%` }} /></div>{!processing && onCancel ? <button className="button button--subtle" onClick={onCancel}>Cancel upload</button> : null}</div> : null}
     {error ? <p className="panel-error">{error}</p> : null}
     <button className="button button--primary panel-submit" onClick={() => void submit()} disabled={busy || !file}>Create scene</button>

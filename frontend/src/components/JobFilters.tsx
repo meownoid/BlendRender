@@ -50,28 +50,28 @@ export function JobFilters({ jobs, scenes, filters, onChange }: JobFiltersProps)
       <header className="jobs-sidebar__heading"><Filter size={18} /><h2>Filters</h2></header>
       <label className="jobs-filter">
         <span>Scene</span>
-        <select value={filters.sceneId} onChange={(event) => onChange({ ...filters, sceneId: event.target.value })}>
+        <select data-1p-ignore="true" value={filters.sceneId} onChange={(event) => onChange({ ...filters, sceneId: event.target.value })}>
           <option value="">All scenes</option>
           {options.scenes.map((scene) => <option key={scene.id} value={scene.id}>{scene.name}</option>)}
         </select>
       </label>
       <label className="jobs-filter">
         <span>Status</span>
-        <select value={filters.status} onChange={(event) => onChange({ ...filters, status: event.target.value as JobStatus | '' })}>
+        <select data-1p-ignore="true" value={filters.status} onChange={(event) => onChange({ ...filters, status: event.target.value as JobStatus | '' })}>
           <option value="">All statuses</option>
           {options.statuses.map((status) => <option key={status} value={status}>{status}</option>)}
         </select>
       </label>
       <label className="jobs-filter">
         <span>Backend</span>
-        <select value={filters.backend} onChange={(event) => onChange({ ...filters, backend: event.target.value as Backend | '' })}>
+        <select data-1p-ignore="true" value={filters.backend} onChange={(event) => onChange({ ...filters, backend: event.target.value as Backend | '' })}>
           <option value="">All backends</option>
           {options.backends.map((backend) => <option key={backend} value={backend}>{backend}</option>)}
         </select>
       </label>
       <label className="jobs-filter">
         <span>Pod</span>
-        <select value={filters.podId} onChange={(event) => onChange({ ...filters, podId: event.target.value })}>
+        <select data-1p-ignore="true" value={filters.podId} onChange={(event) => onChange({ ...filters, podId: event.target.value })}>
           <option value="">All pods</option>
           {options.podIds.map((podId) => <option key={podId} value={podId}>{podId}</option>)}
         </select>

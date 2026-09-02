@@ -5,7 +5,7 @@ import { NewJobPanel } from './NewJobPanel'
 
 test('submits an optional tile size override', async () => {
   const onSubmit = vi.fn().mockResolvedValue(undefined)
-  render(
+  const { container } = render(
     <NewJobPanel
       open
       scene={{
@@ -35,6 +35,10 @@ test('submits an optional tile size override', async () => {
       onSubmit={onSubmit}
     />,
   )
+
+  container.querySelectorAll('input').forEach((input) => {
+    expect(input).toHaveAttribute('data-1p-ignore', 'true')
+  })
 
   fireEvent.change(screen.getByLabelText('Tile size (optional)'), { target: { value: '256' } })
   fireEvent.click(screen.getByRole('button', { name: 'Create job' }))

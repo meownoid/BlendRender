@@ -6,6 +6,7 @@ import { LoginPage } from './LoginPage'
 test('submits the configured password', async () => {
   const onLogin = vi.fn().mockResolvedValue(undefined)
   render(<LoginPage onLogin={onLogin} />)
+  expect(screen.getByLabelText('Password')).toHaveAttribute('data-1p-ignore', 'true')
   fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } })
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
   await waitFor(() => expect(onLogin).toHaveBeenCalledWith('secret'))
@@ -18,4 +19,3 @@ test('shows login failures without replacing the form', async () => {
   expect(await screen.findByText('Incorrect password')).toBeVisible()
   expect(screen.getByRole('heading', { name: 'Open render node' })).toBeVisible()
 })
-

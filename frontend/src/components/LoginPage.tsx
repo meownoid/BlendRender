@@ -43,6 +43,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             onChange={(event) => setPassword(event.target.value)}
             autoFocus
             autoComplete="current-password"
+            data-1p-ignore="true"
             aria-describedby={error ? 'login-error' : undefined}
           />
           <button type="button" onClick={() => setVisible((value) => !value)} aria-label={visible ? 'Hide password' : 'Show password'}>
@@ -58,4 +59,3 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     </main>
   )
 }
-

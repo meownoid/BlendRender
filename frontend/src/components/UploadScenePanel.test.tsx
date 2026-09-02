@@ -16,6 +16,10 @@ test('submits an optional scene name with the selected file', async () => {
   )
   const file = new File(['blend'], 'forest.blend')
 
+  container.querySelectorAll('input').forEach((input) => {
+    expect(input).toHaveAttribute('data-1p-ignore', 'true')
+  })
+
   fireEvent.change(container.querySelector('input[type="file"]')!, {
     target: { files: [file] },
   })

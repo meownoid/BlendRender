@@ -20,6 +20,9 @@ test('offers the shared job dimensions and updates the selected filter', () => {
   const onChange = vi.fn()
   render(<JobFilters jobs={jobs} scenes={scenes} filters={emptyJobFilters} onChange={onChange} />)
 
+  screen.getAllByRole('combobox').forEach((select) => {
+    expect(select).toHaveAttribute('data-1p-ignore', 'true')
+  })
   fireEvent.change(screen.getByLabelText('Backend'), { target: { value: 'OPTIX' } })
 
   expect(screen.getByLabelText('Scene')).toHaveTextContent('First scene')
