@@ -62,8 +62,8 @@ export function SystemPanel({ open, system, samples, onClose }: SystemPanelProps
       <div className="render-panel__header"><div><h2 id="system-panel-title">Performance</h2><p>Current Pod · Last 15 minutes</p></div><button className="icon-button" onClick={onClose} aria-label="Close performance panel"><X size={22} /></button></div>
       {!system || !latest ? <div className="system-panel__loading"><Activity size={24} /> Waiting for system telemetry</div> : <div className="system-panel__plots">
         <ResourcePlot label="CPU" color="var(--accent)" samples={samples} value={(sample) => sample.cpuUtilization} detail={() => 'Host utilization'} />
-        <ResourcePlot label="GPU" color="var(--green)" samples={samples} value={(sample) => sample.gpuUtilization} detail={() => system.gpus.length ? `${system.gpus.length} GPU${system.gpus.length === 1 ? '' : 's'} · peak utilization` : 'No NVIDIA GPU detected'} />
         <ResourcePlot label="MEM" color="var(--blue)" samples={samples} value={(sample) => sample.memoryUtilization} detail={(sample) => `${formatBytes(sample.memoryUsedBytes)} of ${formatBytes(sample.memoryTotalBytes)}`} />
+        <ResourcePlot label="GPU" color="var(--green)" samples={samples} value={(sample) => sample.gpuUtilization} detail={() => system.gpus.length ? `${system.gpus.length} GPU${system.gpus.length === 1 ? '' : 's'} · peak utilization` : 'No NVIDIA GPU detected'} />
         <ResourcePlot label="VRAM" color="#bd8cff" samples={samples} value={(sample) => sample.vramUtilization} detail={(sample) => sample.vramUsedMb == null || sample.vramTotalMb == null ? 'No NVIDIA GPU detected' : `${sample.vramUsedMb.toLocaleString()} MB of ${sample.vramTotalMb.toLocaleString()} MB`} />
       </div>}
     </aside>
