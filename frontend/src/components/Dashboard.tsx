@@ -62,7 +62,13 @@ export function Dashboard({ onLogout }: DashboardProps) {
   }, [hasActive, refresh])
   useEffect(() => {
     if (!selectedSceneId) { setFrames([]); return }
-    api.frames(selectedSceneId).then((page) => setFrames(page.items)).catch((reason) => setError(reason instanceof Error ? reason.message : 'Unable to load scene results'))
+    let canceled = false
+    api.allFrames(selectedSceneId)
+      .then((items) => { if (!canceled) setFrames(items) })
+      .catch((reason) => {
+        if (!canceled) setError(reason instanceof Error ? reason.message : 'Unable to load scene results')
+      })
+    return () => { canceled = true }
   }, [selectedSceneId, jobs])
 
   async function uploadScene(file: File, name: string) {

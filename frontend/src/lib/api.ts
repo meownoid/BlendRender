@@ -1,5 +1,6 @@
 import type {
   CreateJobForm,
+  FrameGroup,
   FrameResult,
   FramesPage,
   Job,
@@ -310,6 +311,18 @@ export const api = {
   retry: (id: string) => request<Job>(`/api/jobs/${id}/retry`, { method: 'POST', body: '{}' }),
   deleteJob: (id: string) => request<void>(`/api/jobs/${id}`, { method: 'DELETE' }),
   frames: (sceneId: string, cursor?: number) => request<FramesPage>(`/api/scenes/${sceneId}/frames${cursor == null ? '' : `?cursor=${cursor}`}`),
+  allFrames: async (sceneId: string): Promise<FrameGroup[]> => {
+    const items: FrameGroup[] = []
+    let cursor: number | undefined
+    do {
+      const params = new URLSearchParams({ limit: '200' })
+      if (cursor != null) params.set('cursor', String(cursor))
+      const page = await request<FramesPage>(`/api/scenes/${sceneId}/frames?${params}`)
+      items.push(...page.items)
+      cursor = page.next_cursor ?? undefined
+    } while (cursor != null)
+    return items
+  },
   result: (sceneId: string, resultId: string) => request<FrameResult>(`/api/scenes/${sceneId}/results/${resultId}`),
   resultImageUrl: (sceneId: string, resultId: string, preview = false) => `/api/scenes/${sceneId}/results/${resultId}/image${preview ? '?preview=true' : ''}`,
   downloadSceneArchive: async (scene: Scene, resultIds?: string[]) => {
