@@ -68,6 +68,10 @@ export interface FramesPage {
   next_cursor: number | null
 }
 
+export interface ArchiveDownload {
+  download_url: string
+}
+
 export interface GPUInfo {
   name: string
   utilization: number

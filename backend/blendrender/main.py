@@ -8,6 +8,7 @@ import uuid
 import zipfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from starlette.requests import ClientDisconnect
 from .auth import SessionManager
 from .config import Settings
 from .models import (
+    ArchiveDownload,
     ArchiveRequest,
     CreateJobRequest,
     CreateUploadRequest,
@@ -50,6 +52,14 @@ from .workspace import (
     WorkspaceStore,
 )
 
+ARCHIVE_DOWNLOAD_TTL_SECONDS = 10 * 60
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedArchive:
+    path: Path
+    filename: str
+
 
 def create_app(settings: Settings | None = None, *, start_worker: bool = True) -> FastAPI:
     resolved = settings or Settings.from_env()
@@ -68,6 +78,8 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
     worker = RenderWorker(resolved, store)
     telemetry = TelemetryCollector(store, probe)
     finalization_tasks: set[asyncio.Task[None]] = set()
+    prepared_archives: dict[str, PreparedArchive] = {}
+    archive_expiry_tasks: dict[str, asyncio.Task[None]] = {}
 
     async def finalize_upload(upload_id: str) -> None:
         try:
@@ -88,6 +100,32 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
         finalization_tasks.add(task)
         task.add_done_callback(finalization_tasks.discard)
 
+    async def expire_archive(download_id: str) -> None:
+        try:
+            await asyncio.sleep(ARCHIVE_DOWNLOAD_TTL_SECONDS)
+            archive = prepared_archives.pop(download_id, None)
+            if archive is not None:
+                archive.path.unlink(missing_ok=True)
+        finally:
+            archive_expiry_tasks.pop(download_id, None)
+
+    async def prepare_archive_download(
+        results: list[FrameResult], filename: str
+    ) -> ArchiveDownload:
+        try:
+            archive_path = await asyncio.to_thread(_create_archive, store, results, filename)
+        except OSError as exc:
+            raise HTTPException(
+                status_code=507, detail="Unable to prepare the archive. Check available disk space."
+            ) from exc
+        download_id = str(uuid.uuid4())
+        prepared_archives[download_id] = PreparedArchive(
+            path=archive_path,
+            filename=filename,
+        )
+        archive_expiry_tasks[download_id] = asyncio.create_task(expire_archive(download_id))
+        return ArchiveDownload(download_url=f"/api/archives/{download_id}")
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await asyncio.to_thread(store.initialize)
@@ -107,6 +145,13 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
         yield
         if finalization_tasks:
             await asyncio.gather(*finalization_tasks, return_exceptions=True)
+        for task in archive_expiry_tasks.values():
+            task.cancel()
+        if archive_expiry_tasks:
+            await asyncio.gather(*archive_expiry_tasks.values(), return_exceptions=True)
+        for archive in prepared_archives.values():
+            archive.path.unlink(missing_ok=True)
+        prepared_archives.clear()
         if start_worker:
             await worker.stop()
         await telemetry.stop()
@@ -471,10 +516,10 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
             content_disposition_type="inline" if preview else "attachment",
         )
 
-    @app.post("/api/scenes/{scene_id}/archive")
+    @app.post("/api/scenes/{scene_id}/archive", response_model=ArchiveDownload)
     async def archive_scene(
         scene_id: str, payload: ArchiveRequest, _: None = Depends(require_auth)
-    ) -> FileResponse:
+    ) -> ArchiveDownload:
         scene = await _require_scene(store, scene_id)
         available = await asyncio.to_thread(store.list_results, scene_id)
         selected = available if payload.result_ids is None else [
@@ -485,26 +530,37 @@ def create_app(settings: Settings | None = None, *, start_worker: bool = True) -
             raise HTTPException(
                 status_code=422, detail="One or more requested results are unavailable"
             )
-        archive_path = await asyncio.to_thread(_create_archive, store, selected, scene.name)
-        return FileResponse(
-            archive_path,
-            media_type="application/zip",
-            filename=f"{Path(scene.name).stem}-results.zip",
-            background=BackgroundTask(archive_path.unlink, missing_ok=True),
+        return await prepare_archive_download(
+            selected,
+            f"{Path(scene.name).stem}-results.zip",
         )
 
-    @app.post("/api/jobs/{job_id}/archive")
-    async def archive_job(job_id: str, _: None = Depends(require_auth)) -> FileResponse:
+    @app.post("/api/jobs/{job_id}/archive", response_model=ArchiveDownload)
+    async def archive_job(job_id: str, _: None = Depends(require_auth)) -> ArchiveDownload:
         job = await _require_job(store, job_id)
         results = await asyncio.to_thread(store.results_for_job, job.id)
         if not results:
             raise HTTPException(status_code=422, detail="This job has no completed results")
-        archive_path = await asyncio.to_thread(_create_archive, store, results, job.filename)
+        return await prepare_archive_download(
+            results,
+            f"{Path(job.filename).stem}-job-{job.id[:8]}.zip",
+        )
+
+    @app.get("/api/archives/{download_id}")
+    async def download_archive(download_id: str, _: None = Depends(require_auth)) -> FileResponse:
+        archive = prepared_archives.pop(download_id, None)
+        expiry_task = archive_expiry_tasks.pop(download_id, None)
+        if expiry_task is not None:
+            expiry_task.cancel()
+        if archive is None or not archive.path.is_file():
+            raise HTTPException(
+                status_code=404, detail="Archive download is unavailable or has expired"
+            )
         return FileResponse(
-            archive_path,
+            archive.path,
             media_type="application/zip",
-            filename=f"{Path(job.filename).stem}-job-{job.id[:8]}.zip",
-            background=BackgroundTask(archive_path.unlink, missing_ok=True),
+            filename=archive.filename,
+            background=BackgroundTask(archive.path.unlink, missing_ok=True),
         )
 
     if resolved.frontend_dist.is_dir():

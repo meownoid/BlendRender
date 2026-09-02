@@ -89,11 +89,14 @@ Status values are `queued`, `running`, `completed`, `failed`, `canceled`, and `i
 | `GET /api/scenes/{id}/frames` | Descending frame groups, each with all result variants |
 | `GET /api/scenes/{id}/results/{result-id}` | Result metadata |
 | `GET /api/scenes/{id}/results/{result-id}/image` | PNG; add `?preview=true` for WebP |
-| `POST /api/scenes/{id}/archive` | ZIP of selected results, or all scene results |
-| `POST /api/jobs/{id}/archive` | ZIP of that job's results; no request body |
+| `POST /api/scenes/{id}/archive` | Prepare a ZIP of selected results, or all scene results |
+| `POST /api/jobs/{id}/archive` | Prepare a ZIP of that job's results; no request body |
+| `GET /api/archives/{download-id}` | One-time, browser-streamed ZIP download |
 
 Frame pages accept `limit` (1–200, default 50) and an optional frame-number `cursor` to request
 frames below that number. Metadata includes backend, hardware, samples, render duration, job ID,
 and Pod ID.
 Scene archives accept `{"result_ids":["RESULT_UUID"]}` or `{"result_ids":null}` for all results.
-ZIPs include PNGs and JSON metadata.
+Archive preparation returns `{"download_url":"/api/archives/ARCHIVE_UUID"}`. Open that URL as a
+normal browser download rather than fetching it into JavaScript memory. Prepared downloads expire
+after ten minutes and can be used once. ZIPs include PNGs and JSON metadata.

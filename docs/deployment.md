@@ -31,7 +31,8 @@ process and one render at a time; jobs are never reassigned to another Pod.
 ## Storage
 
 Keep `/workspace/blendrender` on persistent storage. It contains scenes, jobs, results, and Pod
-status. Container disk holds temporary files and download archives.
+status. Container disk holds temporary files and prepared download archives; allow free space at
+least as large as the largest ZIP users may download.
 
 A project ZIP is staged before extraction. At the default upload limit, allow at least 41 GiB free
 on the volume for a 20 GiB ZIP and 20 GiB of extracted files, plus space for render results.

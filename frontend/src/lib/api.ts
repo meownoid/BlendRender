@@ -1,4 +1,5 @@
 import type {
+  ArchiveDownload,
   CreateJobForm,
   FrameGroup,
   FrameResult,
@@ -326,27 +327,24 @@ export const api = {
   result: (sceneId: string, resultId: string) => request<FrameResult>(`/api/scenes/${sceneId}/results/${resultId}`),
   resultImageUrl: (sceneId: string, resultId: string, preview = false) => `/api/scenes/${sceneId}/results/${resultId}/image${preview ? '?preview=true' : ''}`,
   downloadSceneArchive: async (scene: Scene, resultIds?: string[]) => {
-    const response = await fetch(`/api/scenes/${scene.id}/archive`, {
+    const archive = await request<ArchiveDownload>(`/api/scenes/${scene.id}/archive`, {
       method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ result_ids: resultIds?.length ? resultIds : null }),
     })
-    if (!response.ok) throw responseError({ status: response.status, responseText: await response.text() } as XMLHttpRequest)
-    const blob = await response.blob()
-    downloadBlob(blob, `${scene.name.replace(/\.blend$/i, '')}-results.zip`)
+    downloadFromUrl(archive.download_url)
   },
   downloadJobArchive: async (job: Job) => {
-    const response = await fetch(`/api/jobs/${job.id}/archive`, {
+    const archive = await request<ArchiveDownload>(`/api/jobs/${job.id}/archive`, {
       method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}',
     })
-    if (!response.ok) throw responseError({ status: response.status, responseText: await response.text() } as XMLHttpRequest)
-    downloadBlob(await response.blob(), `${job.filename.replace(/\.blend$/i, '')}-job-${job.id.slice(0, 8)}.zip`)
+    downloadFromUrl(archive.download_url)
   },
 }
 
-function downloadBlob(blob: Blob, name: string) {
-  const url = URL.createObjectURL(blob)
+function downloadFromUrl(url: string) {
   const anchor = document.createElement('a')
   anchor.href = url
-  anchor.download = name
+  anchor.hidden = true
+  document.body.append(anchor)
   anchor.click()
-  URL.revokeObjectURL(url)
+  anchor.remove()
 }

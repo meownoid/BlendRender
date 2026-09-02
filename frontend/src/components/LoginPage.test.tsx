@@ -19,3 +19,10 @@ test('shows login failures without replacing the form', async () => {
   expect(await screen.findByText('Incorrect password')).toBeVisible()
   expect(screen.getByRole('heading', { name: 'Open render node' })).toBeVisible()
 })
+
+test('does not render login footer text', () => {
+  render(<LoginPage onLogin={vi.fn().mockResolvedValue(undefined)} />)
+
+  expect(screen.queryByText('Blender 5.2 LTS')).not.toBeInTheDocument()
+  expect(screen.queryByText('GPU node')).not.toBeInTheDocument()
+})

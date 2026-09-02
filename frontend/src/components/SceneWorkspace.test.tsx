@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { vi } from 'vitest'
 import { api } from '../lib/api'
 import { SceneWorkspace } from './SceneWorkspace'
@@ -23,7 +23,7 @@ const scene = {
   result_count: 2,
 }
 
-test('renders every result variant for a frame and downloads a selection', () => {
+test('renders every result variant for a frame and downloads a selection', async () => {
   render(
     <SceneWorkspace
       scene={scene}
@@ -50,7 +50,7 @@ test('renders every result variant for a frame and downloads a selection', () =>
               scene_id: scene.id,
               job_id: 'job-2',
               frame: 12,
-              pod_id: 'pod-gpu',
+              pod_id: 'pod-gpu-with-a-very-long-name',
               backend: 'OPTIX',
               hardware: ['NVIDIA RTX 6000 Ada'],
               samples: 64,
@@ -68,8 +68,32 @@ test('renders every result variant for a frame and downloads a selection', () =>
   expect(screen.getByText('AMD EPYC')).toBeVisible()
   expect(screen.getByText('NVIDIA RTX 6000 Ada')).toBeVisible()
   expect(screen.getByText('64 samples')).toBeVisible()
+  expect(screen.getByText('pod-gpu-with-a-v...')).toHaveAttribute('title', 'pod-gpu-with-a-very-long-name')
 
   fireEvent.click(screen.getByAltText('Frame 12, CPU render'))
   fireEvent.click(screen.getByRole('button', { name: 'Download 1' }))
-  expect(api.downloadSceneArchive).toHaveBeenCalledWith(scene, ['result-cpu'])
+  await waitFor(() => expect(api.downloadSceneArchive).toHaveBeenCalledWith(scene, ['result-cpu']))
+})
+
+test('shows download progress, disables the button, and reports an archive error', async () => {
+  let rejectDownload: (reason: Error) => void = () => undefined
+  vi.mocked(api.downloadSceneArchive).mockImplementationOnce(() => new Promise<void>((_, reject) => {
+    rejectDownload = reject
+  }))
+  render(
+    <SceneWorkspace
+      scene={scene}
+      jobs={[]}
+      onDelete={vi.fn().mockResolvedValue(undefined)}
+      frames={[{ frame: 12, results: [{ id: 'result-cpu', scene_id: scene.id, job_id: 'job-1', frame: 12, pod_id: 'pod-cpu', backend: 'CPU', hardware: ['AMD EPYC'], samples: 32, render_seconds: 8.4, completed_at: '2026-01-01T00:01:00Z' }] }]}
+    />,
+  )
+
+  fireEvent.click(screen.getByRole('button', { name: 'Download all' }))
+  expect(screen.getByRole('button', { name: 'Preparing download…' })).toBeDisabled()
+  expect(screen.getByRole('status', { name: 'Preparing result archive' })).toBeVisible()
+
+  rejectDownload(new Error('Archive service is unavailable'))
+  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Archive service is unavailable'))
+  expect(screen.getByRole('button', { name: 'Download all' })).toBeEnabled()
 })

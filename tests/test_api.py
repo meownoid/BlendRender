@@ -306,8 +306,21 @@ def test_foreign_job_is_read_only_and_results_are_grouped(settings, tmp_path) ->
             f"/api/scenes/{scene_id}/results/00000000-0000-4000-8000-000000000103/image"
         )
         assert image.status_code == 200
-        archive = client.post(f"/api/scenes/{scene_id}/archive", json={"result_ids": None})
+        prepared = client.post(f"/api/scenes/{scene_id}/archive", json={"result_ids": None})
+        assert prepared.status_code == 200
+        download_url = prepared.json()["download_url"]
+        archive = client.get(download_url)
         assert archive.status_code == 200
+        assert archive.headers["content-type"] == "application/zip"
+        assert 'filename="input-results.zip"' in archive.headers["content-disposition"]
+        with zipfile.ZipFile(io.BytesIO(archive.content)) as bundle:
+            assert sorted(bundle.namelist()) == [
+                "frame_000002-00000000-0000-4000-8000-000000000103.json",
+                "frame_000002-00000000-0000-4000-8000-000000000103.png",
+                "frame_000002-00000000-0000-4000-8000-000000000104.json",
+                "frame_000002-00000000-0000-4000-8000-000000000104.png",
+            ]
+        assert client.get(download_url).status_code == 404
 
 
 def test_scene_delete_rejects_active_jobs_and_job_delete_preserves_results(settings) -> None:

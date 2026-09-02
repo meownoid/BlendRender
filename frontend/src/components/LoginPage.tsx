@@ -55,7 +55,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           {submitting ? 'Opening…' : 'Continue'}
         </button>
       </form>
-      <footer className="login-shell__footer">Blender 5.2 LTS <span>·</span> GPU node</footer>
     </main>
   )
 }

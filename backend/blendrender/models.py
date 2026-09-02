@@ -252,6 +252,10 @@ class ArchiveRequest(BaseModel):
     result_ids: list[str] | None = None
 
 
+class ArchiveDownload(BaseModel):
+    download_url: str
+
+
 class GPUInfo(BaseModel):
     name: str
     utilization: int = Field(ge=0, le=100)

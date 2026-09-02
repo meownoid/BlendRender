@@ -47,3 +47,34 @@ test('loads every frame page for a scene', async () => {
     '/api/scenes/scene-1/frames?limit=200&cursor=199',
   ])
 })
+
+test('starts a native archive download without buffering the ZIP in JavaScript', async () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+    download_url: '/api/archives/archive-1',
+  })))
+  const responseBlob = vi.spyOn(Response.prototype, 'blob')
+  let downloadedUrl: string | null = null
+  const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+    downloadedUrl = this.getAttribute('href')
+  })
+
+  await api.downloadSceneArchive({
+    id: 'scene-1',
+    filename: 'city.blend',
+    name: 'City at night',
+    source_kind: 'blend',
+    entrypoint: 'input.blend',
+    created_at: '2026-01-01T00:00:00Z',
+    size_bytes: 100,
+    job_count: 0,
+    result_count: 1,
+  })
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/scenes/scene-1/archive', expect.objectContaining({
+    method: 'POST',
+  }))
+  expect(responseBlob).not.toHaveBeenCalled()
+  expect(click).toHaveBeenCalledOnce()
+  expect(downloadedUrl).toBe('/api/archives/archive-1')
+  expect(document.querySelector('a[href="/api/archives/archive-1"]')).toBeNull()
+})
