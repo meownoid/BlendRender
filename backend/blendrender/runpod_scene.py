@@ -38,6 +38,7 @@ MAX_UPLOAD_WORKERS = 16
 S3_MAX_RETRIES = 5
 S3_INITIAL_TIMEOUT_SECONDS = 60
 S3_COMPLETE_POLL_SECONDS = 5
+S3_DOWNLOAD_CHUNK_BYTES = 8 * MEBIBYTE
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
@@ -94,6 +95,10 @@ class ObjectUploader(Protocol):
     def list_object_sizes(self, prefix: PurePosixPath) -> dict[PurePosixPath, int]: ...
 
     def read_json(self, key: PurePosixPath) -> dict[str, object]: ...
+
+    def download_file(self, key: PurePosixPath, destination: Path) -> int: ...
+
+    def delete_objects(self, keys: tuple[PurePosixPath, ...]) -> None: ...
 
     def upload_file(self, source: Path, key: PurePosixPath) -> None: ...
 
@@ -276,6 +281,66 @@ class Boto3Uploader:
             )
         return cast(dict[str, object], payload)
 
+    def download_file(self, key: PurePosixPath, destination: Path) -> int:
+        if destination.exists():
+            raise RunpodScenePreparationError(
+                f"Refusing to overwrite existing download {destination}"
+            )
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            response = self._request_with_retry(
+                f"download {key}",
+                lambda: self._client.get_object(Bucket=self.settings.volume_id, Key=key.as_posix()),
+            )
+        except ClientError as exc:
+            raise _s3_error(f"download {key}", exc) from exc
+        except BotoCoreError as exc:
+            raise _s3_error(f"download {key}", exc) from exc
+
+        content = response.get("Body")
+        read = getattr(content, "read", None)
+        expected_size = response.get("ContentLength")
+        if (
+            not callable(read)
+            or isinstance(expected_size, bool)
+            or not isinstance(expected_size, int)
+        ):
+            raise RunpodScenePreparationError(f"RunPod S3 returned an invalid download for {key}")
+        if expected_size < 0:
+            raise RunpodScenePreparationError(f"RunPod S3 returned an invalid download for {key}")
+
+        logger.info("Downloading %s to %s", key, destination)
+        downloaded_size = 0
+        created_destination = False
+        try:
+            with destination.open("xb") as output:
+                created_destination = True
+                while True:
+                    chunk = read(S3_DOWNLOAD_CHUNK_BYTES)
+                    if not isinstance(chunk, bytes):
+                        raise RunpodScenePreparationError(
+                            f"RunPod S3 returned an invalid download for {key}"
+                        )
+                    if not chunk:
+                        break
+                    output.write(chunk)
+                    downloaded_size += len(chunk)
+            if downloaded_size != expected_size:
+                raise RunpodScenePreparationError(
+                    f"RunPod S3 download for {key} had {downloaded_size} bytes; "
+                    f"expected {expected_size}"
+                )
+        except BaseException:
+            if created_destination:
+                destination.unlink(missing_ok=True)
+            raise
+        finally:
+            close = getattr(content, "close", None)
+            if callable(close):
+                close()
+        logger.info("Downloaded %s", key)
+        return downloaded_size
+
     def upload_file(self, source: Path, key: PurePosixPath) -> None:
         size_bytes = source.stat().st_size
         if size_bytes >= MULTIPART_THRESHOLD_BYTES:
@@ -312,6 +377,24 @@ class Boto3Uploader:
         )
         self._verify_object_size(key, len(content))
         logger.info("Uploaded %s", key)
+
+    def delete_objects(self, keys: tuple[PurePosixPath, ...]) -> None:
+        """Delete a known set of network-volume objects."""
+
+        for key in keys:
+            def delete(current_key: PurePosixPath = key) -> dict[str, Any]:
+                return self._client.delete_object(
+                    Bucket=self.settings.volume_id,
+                    Key=current_key.as_posix(),
+                )
+
+            logger.info("Deleting object %s", key)
+            response = self._request(
+                f"delete object {key}",
+                delete,
+            )
+            if response.get("Errors"):
+                raise RunpodScenePreparationError(f"RunPod S3 could not delete {key}")
 
     def clear_volume(self, *, dry_run: bool) -> ClearedVolume:
         """Delete every object and incomplete multipart upload from the network volume."""

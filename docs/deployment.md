@@ -148,6 +148,50 @@ disk space for its unpacked project files. `MAX_UPLOAD_GB` has the same 20 GiB d
 dashboard upload. The Boto3 transfer behavior follows RunPod's
 [large-file upload helper](https://github.com/runpod/runpod-s3-examples/blob/main/upload_large_file.py).
 
+## Manage S3 scenes, jobs, and results
+
+Use `scripts/manage_runpod_scenes.py` with the same RunPod S3 environment variables to inventory
+completed scene data on the network volume. Its `list` subcommand prints every scene together with
+its jobs, current job statuses, and published result variants. `--json` emits the same inventory in
+machine-readable form.
+
+```bash
+uv run python scripts/manage_runpod_scenes.py list
+uv run python scripts/manage_runpod_scenes.py list --scene-id 'SCENE_UUID' --json
+```
+
+Use `download` to retrieve the complete result packages (`frame.png`, `preview.webp`, and
+`metadata.json`). Without `--scene-id`, it downloads results for all completed scenes; with it, only
+that scene's results are downloaded. The destination must be new or empty, and the script refuses to
+overwrite any local file. Downloads retain the volume's `scenes/{scene-id}/results/...` hierarchy.
+
+```bash
+uv run python scripts/manage_runpod_scenes.py download \
+  --scene-id 'SCENE_UUID' \
+  --download-dir ./blendrender-results
+```
+
+The three deletion subcommands require either a specific UUID or `--all`, plus the configured
+network-volume ID as an explicit confirmation. `delete-jobs` preserves published results and refuses
+queued or running jobs. `delete-results` preserves scenes and jobs. `delete-scenes` deletes the
+scene's source and results as well as its terminal jobs, and similarly refuses any queued or running
+job. These are direct S3 deletions and cannot be recovered from BlendRender's workspace trash.
+Run them only while no Pod or preparation script is writing to the selected data.
+
+```bash
+uv run --env-file .env -- python scripts/manage_runpod_scenes.py delete-results \
+  --result-id 'RESULT_UUID' \
+  --confirm "$RUNPOD_NETWORK_VOLUME_ID"
+
+uv run --env-file .env -- python scripts/manage_runpod_scenes.py delete-jobs \
+  --all \
+  --confirm "$RUNPOD_NETWORK_VOLUME_ID"
+
+uv run --env-file .env -- python scripts/manage_runpod_scenes.py delete-scenes \
+  --scene-id 'SCENE_UUID' \
+  --confirm "$RUNPOD_NETWORK_VOLUME_ID"
+```
+
 ## Clear a RunPod network volume
 
 `scripts/clear_runpod_volume.py` removes **every object** in `RUNPOD_NETWORK_VOLUME_ID`, including

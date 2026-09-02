@@ -96,7 +96,10 @@ COPY --from=frontend-builder /build/frontend/dist ./frontend/dist
 RUN groupadd --gid 10001 blendrender \
     && useradd --uid 10001 --gid blendrender --no-create-home --shell /usr/sbin/nologin blendrender \
     && chmod 755 /app/scripts/container-entrypoint.sh \
-    && chown -R blendrender:blendrender /app
+    && chown -R blendrender:blendrender /app \
+    && mkdir -p /opt/blender/5.2/scripts/addons_core/flip_fluids_addon/materials/material_library/icons \
+    && chown -R blendrender:blendrender \
+        /opt/blender/5.2/scripts/addons_core/flip_fluids_addon/materials/material_library/icons
 
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \

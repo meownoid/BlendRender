@@ -124,7 +124,7 @@ class RecordingS3Client:
         return {"ContentLength": len(self.objects[Key])}
 
     def get_object(self, *, Bucket: str, Key: str) -> dict[str, object]:
-        return {"Body": BytesIO(self.objects[Key])}
+        return {"Body": BytesIO(self.objects[Key]), "ContentLength": len(self.objects[Key])}
 
     def list_objects_v2(self, *, Bucket: str, Prefix: str, MaxKeys: int) -> dict[str, object]:
         return {"Contents": []}
@@ -564,6 +564,22 @@ def test_boto3_uploader_reads_a_json_object(
     assert uploader.read_json(PurePosixPath(key)) == {"id": "scene"}
 
 
+def test_boto3_uploader_downloads_a_result_without_overwriting(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, runpod_settings: RunpodS3Settings
+) -> None:
+    client = RecordingS3Client()
+    key = PurePosixPath("blendrender/scenes/scene/results/000001/result/frame.png")
+    client.objects[key.as_posix()] = b"png"
+    uploader = Boto3Uploader(runpod_settings)
+    monkeypatch.setattr(uploader, "_client", client)
+    destination = tmp_path / "frame.png"
+
+    assert uploader.download_file(key, destination) == 3
+    assert destination.read_bytes() == b"png"
+    with pytest.raises(RunpodScenePreparationError, match="Refusing to overwrite"):
+        uploader.download_file(key, destination)
+
+
 def test_boto3_uploader_lists_all_existing_object_sizes(
     monkeypatch: pytest.MonkeyPatch, runpod_settings: RunpodS3Settings
 ) -> None:
@@ -741,6 +757,24 @@ def test_boto3_uploader_clears_all_objects_and_incomplete_multipart_uploads(
     assert "Found 2 incomplete multipart uploads" in caplog.messages
     assert "Deleting object blendrender/a" in caplog.messages
     assert "Deleted 3 network-volume objects" in caplog.messages
+
+
+def test_boto3_uploader_deletes_known_objects(
+    monkeypatch: pytest.MonkeyPatch, runpod_settings: RunpodS3Settings
+) -> None:
+    client = ClearingS3Client()
+    uploader = Boto3Uploader(runpod_settings)
+    monkeypatch.setattr(uploader, "_client", client)
+
+    uploader.delete_objects(
+        (
+            PurePosixPath("blendrender/a"),
+            PurePosixPath("blendrender/b"),
+        )
+    )
+
+    assert client.objects == {"other": b"c"}
+    assert client.deleted_keys == ["blendrender/a", "blendrender/b"]
 
 
 def test_boto3_uploader_cleanup_dry_run_does_not_change_the_network_volume(
