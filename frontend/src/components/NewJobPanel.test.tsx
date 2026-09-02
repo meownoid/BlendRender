@@ -61,15 +61,16 @@ test('keeps an empty frame field blank until it loses focus', () => {
     />,
   )
 
-  const start = screen.getByLabelText('Start')
-  fireEvent.change(start, { target: { value: '' } })
-  expect(start).toHaveValue(null)
+  expect(screen.getByRole('button', { name: 'Still' })).toHaveClass('is-selected')
+  const frame = screen.getByLabelText('Frame')
+  fireEvent.change(frame, { target: { value: '' } })
+  expect(frame).toHaveValue(null)
 
-  fireEvent.change(start, { target: { value: '14' } })
-  expect(start).toHaveValue(14)
+  fireEvent.change(frame, { target: { value: '14' } })
+  expect(frame).toHaveValue(14)
 
-  fireEvent.blur(start)
-  expect(screen.queryByText('Start frame must be an integer.')).not.toBeInTheDocument()
+  fireEvent.blur(frame)
+  expect(screen.queryByText('Frame must be an integer.')).not.toBeInTheDocument()
 })
 
 test('validates an empty frame field after it loses focus', () => {
@@ -84,10 +85,10 @@ test('validates an empty frame field after it loses focus', () => {
     />,
   )
 
-  const start = screen.getByLabelText('Start')
-  fireEvent.change(start, { target: { value: '' } })
-  fireEvent.blur(start)
-  expect(screen.getByText('Start frame must be an integer.')).toBeVisible()
+  const frame = screen.getByLabelText('Frame')
+  fireEvent.change(frame, { target: { value: '' } })
+  fireEvent.blur(frame)
+  expect(screen.getByText('Frame must be an integer.')).toBeVisible()
 })
 
 test('validates the resolution scale before submitting the render', async () => {

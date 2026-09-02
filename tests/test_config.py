@@ -4,11 +4,13 @@ import pytest
 from blendrender.config import Settings
 
 
-def test_upload_chunk_size_defaults_to_eight_mebibytes(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_upload_chunk_size_defaults_to_thirty_two_mebibytes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("APP_PASSWORD", "test-password")
     monkeypatch.delenv("UPLOAD_CHUNK_MB", raising=False)
 
-    assert Settings.from_env().upload_chunk_bytes == 8 * 1024**2
+    assert Settings.from_env().upload_chunk_bytes == 32 * 1024**2
 
 
 def test_upload_chunk_size_uses_configured_mebibytes(monkeypatch: pytest.MonkeyPatch) -> None:

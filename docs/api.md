@@ -25,7 +25,7 @@ at most 100,000 entries. See [scene preparation](rendering.md#prepare-a-scene).
 1. `POST /api/uploads` with JSON fields `filename`, `size_bytes`, and optional `name`. Returns `201` with the
    session ID, `uploaded_bytes`, `chunk_size_bytes`, expiry, and status.
 2. `PATCH /api/uploads/{id}` with raw `application/octet-stream` bytes and an `Upload-Offset` header.
-   Send contiguous chunks no larger than `chunk_size_bytes` (8 MiB by default). The response confirms
+   Send contiguous chunks no larger than `chunk_size_bytes` (32 MiB by default). The response confirms
    `uploaded_bytes`. On `409`, resume from the returned session or `Upload-Offset` response header.
 3. `POST /api/uploads/{id}/complete` after all bytes arrive. Returns `202` while validation and
    extraction run. Poll `GET /api/uploads/{id}` for `completed` with a `scene`, or `failed` with an

@@ -53,7 +53,7 @@ See [.env.example](../.env.example) for a starting configuration.
 | `WORKSPACE_ROOT` | `/workspace/blendrender` | Persistent workspace path |
 | `COOKIE_SECURE` | `true` | Require HTTPS for session cookies; use `false` only for local HTTP |
 | `MAX_UPLOAD_GB` | `20` | Upload and extracted ZIP limit, in GiB |
-| `UPLOAD_CHUNK_MB` | `8` | Maximum upload chunk in whole MiB; lower for unreliable connections |
+| `UPLOAD_CHUNK_MB` | `32` | Maximum upload chunk in whole MiB; lower for unreliable connections |
 
 Advanced settings usually need no changes:
 

@@ -12,7 +12,7 @@ interface NewJobPanelProps {
 }
 
 export function NewJobPanel({ open, scene, system, busy, onClose, onSubmit }: NewJobPanelProps) {
-  const [mode, setMode] = useState<'still' | 'range'>('range')
+  const [mode, setMode] = useState<'still' | 'range'>('still')
   const [frame, setFrame] = useState('1')
   const [start, setStart] = useState('1')
   const [end, setEnd] = useState('120')

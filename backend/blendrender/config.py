@@ -71,7 +71,7 @@ class Settings:
                 os.getenv("FRONTEND_DIST", str(project_root / "frontend/dist"))
             ).resolve(),
             max_upload_bytes=int(float(os.getenv("MAX_UPLOAD_GB", "20")) * 1024**3),
-            upload_chunk_bytes=_positive_integer_env("UPLOAD_CHUNK_MB", 8) * 1024**2,
+            upload_chunk_bytes=_positive_integer_env("UPLOAD_CHUNK_MB", 32) * 1024**2,
             cookie_secure=_bool_env("COOKIE_SECURE", True),
             session_ttl_seconds=int(os.getenv("SESSION_TTL_SECONDS", str(7 * 24 * 3600))),
             cancel_grace_seconds=float(os.getenv("CANCEL_GRACE_SECONDS", "8")),
