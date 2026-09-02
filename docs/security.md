@@ -1,46 +1,36 @@
 # Security
 
-BlendRender is intended for a trusted operator or a small trusted group. Its controls reduce common
-web and Blender-project risks, but Blender is a large native application and this service is not a
-strong sandbox for hostile, multi-tenant uploads.
+BlendRender is designed for a trusted operator or small trusted team. It is not a secure sandbox
+for hostile uploads or a service with separate user accounts.
 
-## Trust boundary
+## Access and isolation
 
-Anyone who knows `APP_PASSWORD` can upload projects, start resource-intensive renders, read job
-metadata and logs, download completed frames, cancel work, and delete terminal jobs. Give every node
-a unique random password and expose it only through HTTPS.
+Anyone with `APP_PASSWORD` can read shared scenes and results, upload projects, start renders,
+and delete data. Job cancellation, retry, and deletion must go through the owning Pod.
 
-Do not accept untrusted `.blend` files solely because Python auto-execution is disabled. Crafted
-files may still exercise Blender parsers, codecs, linked data, render settings, compositor nodes,
-and high resource consumption. Isolate the Pod and avoid attaching unrelated credentials or data.
+Use a long, random password shared only with trusted operators. Pods sharing a workspace should
+use the same password. Expose the service through HTTPS with `COOKIE_SECURE=true`.
 
-The production image also runs the pinned public FLIP Fluids Demo v1.8.8 add-on before opening a
-scene. This is trusted administrator-built image code, not an add-on supplied by an upload; embedded
-Python in uploaded scenes remains disabled.
+Blender's embedded Python auto-execution is disabled, but crafted files can still exercise native
+parsers, codecs, and resource-intensive settings. Isolate the Pod from unrelated data and
+credentials. Every Pod attached to the network volume can read its contents, including project
+files and logs.
 
-Scene filenames, errors, logs, source projects, and results can contain sensitive project
-information. The shared `WORKSPACE_ROOT` should be protected accordingly; every attached Pod can
-read its contents.
+The bundled FLIP Fluids add-on is trusted image code loaded before the scene opens. Uploads cannot
+install their own add-ons through this mechanism.
 
-## Web controls
+## Built-in controls
 
-- Password comparison is constant-time.
-- A wrong-password response is delayed by 0.5 seconds. After ten failures, further attempts in the
-  rolling minute are rate-limited in that application process.
-- Authentication uses a signed HTTP-only, same-site-strict cookie. It is secure by default and
-  expires according to `SESSION_TTL_SECONDS`.
-- Responses set a restrictive content security policy and deny framing, MIME sniffing, referrer
-  data, and camera/microphone/geolocation access.
-- Uploaded paths are derived from generated UUIDs. Scene display names and original filenames are
-  reduced to a printable base name and are used only as metadata/download naming.
-- Upload chunks are streamed directly to UUID-derived staging paths on the shared volume and are
-  size-limited, ordered, and durably checkpointed. Inactive staging data expires after 24 hours.
-  Project ZIPs are limited by both compressed upload and extracted regular-file size and 100,000
-  entries, then extracted only after rejecting encrypted, special, duplicate, absolute, and
-  traversal entries. Archive selections must refer to available frames.
+- Signed, HTTP-only, same-site-strict session cookies, secure by default and valid for seven days
+  unless `SESSION_TTL_SECONDS` is changed.
+- Constant-time password comparison, delayed failures, and a per-process login limit after ten
+  failed attempts in a rolling minute.
+- Cross-origin mutation checks and restrictive response headers for scripts, framing, referrers,
+  MIME handling, and browser permissions.
+- UUID-based storage paths and sanitized display names.
+- Size-limited, ordered upload chunks with 24-hour expiry for inactive staging data.
+- ZIP validation that rejects unsafe paths, duplicate entries, encryption, and special files;
+  both uploaded and extracted sizes are limited, with at most 100,000 entries.
 
-These controls do not provide per-user identity, revocation, audit history, network rate limiting,
-or authorization boundaries between jobs.
-
-For storage and deployment precautions, see [Deployment and operations](deployment.md). For scene
-requirements and Blender launch behavior, see [Rendering](rendering.md).
+These controls do not provide per-user permissions, individual session revocation, audit history,
+or network-level rate limiting. For deployment settings, see [Deployment](deployment.md).

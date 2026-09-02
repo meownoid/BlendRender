@@ -1,226 +1,93 @@
 # Deployment and operations
 
-## Shared RunPod deployment
+## Build the image
 
-Deploy the same image to every peer Pod and attach the same Secure Cloud network volume during Pod
-creation. RunPod mounts that volume at `/workspace`; BlendRender stores its v2 workspace in
-`/workspace/blendrender` by default. All peer Pods must run the same BlendRender version and have a
-common `APP_PASSWORD` for a consistent operator experience.
-
-Each Pod is a complete dashboard/API instance and renders only jobs created through its own URL.
-Use multiple Pod dashboards to run multiple jobs for the same scene in parallel. A network-volume
-Pod cannot be stopped, only terminated; terminated-owner jobs remain shared read-only history.
-
-## Production image
-
-The production `Dockerfile` builds the Vite frontend, creates a locked Python environment, compiles
-the public FLIP Fluids Demo v1.8.8 submodule, and downloads the pinned Blender 5.2.1 Linux x64
-archive with SHA-256 verification. It creates the shared workspace subdirectory before dropping to
-UID/GID `10001` under `tini`.
-
-Build and push the required platform explicitly:
+The production image includes the dashboard, API, Blender 5.2.1, and FLIP Fluids Demo v1.8.8.
+Build for `linux/amd64`, including when building on Apple Silicon:
 
 ```bash
 git submodule update --init --recursive
-docker buildx build --platform linux/amd64 \
-  -t YOUR_REGISTRY/blendrender:2.1.0 --push .
+docker buildx build --platform linux/amd64 -t YOUR_REGISTRY/blendrender:2.1.0 --push .
 ```
 
-Blender 5.2.1 is published for Linux x64 in this build, so the production target is
-`linux/amd64` even when the build host is Apple Silicon.
+To build locally without publishing, use `just docker-build`.
 
-## GitHub Actions and GHCR
+## Configure RunPod
 
-The `Test and publish image` workflow runs the unit tests, static checks, and frontend production
-build for pull requests, pushes to `main`, and tags beginning with `v`. Pull requests receive only
-read access and stop after verification. For trusted pushes, a production container build then
-publishes after verification succeeds:
+Create a Secure Cloud Pod with:
 
-- a push to `main` publishes `ghcr.io/OWNER/REPOSITORY:main`, `:latest`, and `:sha-COMMIT`;
-- a version tag publishes `ghcr.io/OWNER/REPOSITORY:TAG` and `:sha-COMMIT`.
+- Your published image and registry credentials if the image is private.
+- An RTX-class NVIDIA GPU for OptiX and HTTP port `8000` exposed.
+- At least 20 GB of container disk for the image and temporary downloads.
+- A network volume mounted at `/workspace`.
+- A long, random `APP_PASSWORD` and `COOKIE_SECURE=true`.
 
-Repository and owner names are normalized to lowercase for GHCR. The workflow uses its scoped
-`GITHUB_TOKEN`, so no publishing secret is required.
+Open `https://POD_ID-8000.proxy.runpod.net` and sign in with `APP_PASSWORD`.
 
-## RunPod configuration
+For multiple Pods, use the same image version, network volume, workspace path, and password.
+Create jobs through each Pod's dashboard to render in parallel. Each Pod runs one application
+process and one render at a time; jobs are never reassigned to another Pod.
 
-Create a RunPod **Pod**, not a serverless endpoint, with:
+## Storage
 
-- the pushed image;
-- configured GHCR credentials if the image is private;
-- an RTX-class NVIDIA GPU for OptiX;
-- HTTP port `8000`;
-- at least 20 GB of container disk for the image and temporary archive responses;
-- a network volume with at least 41 GiB free when accepting the default maximum project ZIP; and
-- a long, random `APP_PASSWORD`; and
-- the same Secure Cloud network volume mounted at `/workspace` as its peer Pods.
+Keep `/workspace/blendrender` on persistent storage. It contains scenes, jobs, results, and Pod
+status. Container disk holds temporary files and download archives.
 
-Open the node through `https://POD_ID-8000.proxy.runpod.net`. Keep `COOKIE_SECURE=true` behind the
-RunPod HTTPS proxy.
+A project ZIP is staged before extraction. At the default upload limit, allow at least 41 GiB free
+on the volume for a 20 GiB ZIP and 20 GiB of extracted files, plus space for render results.
+Interrupted browser uploads can resume for 24 hours.
 
-## Environment
+The container creates the workspace directory, then runs as UID/GID `10001`. It does not change
+volume ownership; the mounted workspace must already permit that user to write.
+
+For direct uploads, downloads, source replacement, and cleanup, use the
+[RunPod S3 scripts guide](s3-guide.md).
+
+## Configuration
+
+See [.env.example](../.env.example) for a starting configuration.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `APP_PASSWORD` | required | Operator password and cookie-signing source |
-| `WORKSPACE_ROOT` | `/workspace/blendrender` | Shared scenes, jobs, results, node heartbeats, and telemetry |
-| `BLENDRENDER_POD_ID` | `RUNPOD_POD_ID`, then hostname | Development override for Pod ownership |
+| `APP_PASSWORD` | Required | Sign-in password and cookie-signing source |
+| `WORKSPACE_ROOT` | `/workspace/blendrender` | Persistent workspace path |
+| `COOKIE_SECURE` | `true` | Require HTTPS for session cookies; use `false` only for local HTTP |
+| `MAX_UPLOAD_GB` | `20` | Upload and extracted ZIP limit, in GiB |
+| `UPLOAD_CHUNK_MB` | `8` | Maximum upload chunk in whole MiB; lower for unreliable connections |
+
+Advanced settings usually need no changes:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `BLENDRENDER_POD_ID` | `RUNPOD_POD_ID`, then hostname | Override the job owner ID; keep unique per Pod |
 | `BLENDER_BIN` | `/opt/blender/blender` | Blender executable |
-| `RENDERER_SCRIPT` | bundled renderer | Blender-side runner |
-| `FLIP_FLUIDS_ADDON` | unset outside the image | Bundled add-on module to enable before a scene opens |
-| `FLIP_FLUIDS_BOOTSTRAP_SCRIPT` | bundled bootstrap | Trusted script that enables `FLIP_FLUIDS_ADDON` |
-| `MAX_UPLOAD_GB` | `20` | Upload and extracted ZIP limit |
-| `UPLOAD_CHUNK_MB` | `8` | Maximum browser upload request size in whole MiB; lower it for slower or less reliable proxies |
-| `COOKIE_SECURE` | `true` | Restrict cookies to HTTPS |
-| `AVAILABLE_BACKENDS` | probe | Development/test backend override |
+| `RENDERER_SCRIPT` | Bundled renderer | Blender render script |
+| `FRONTEND_DIST` | Bundled `frontend/dist` | Built dashboard directory |
+| `FLIP_FLUIDS_ADDON` | `flip_fluids_addon` in the image | Add-on enabled before opening a scene; unset for local development |
+| `FLIP_FLUIDS_BOOTSTRAP_SCRIPT` | Bundled bootstrap | Script that enables the configured add-on |
+| `SESSION_TTL_SECONDS` | `604800` | Session lifetime: seven days |
+| `CANCEL_GRACE_SECONDS` | `8` | Wait before force-killing a canceled Blender process |
+| `AVAILABLE_BACKENDS` | Auto-detected | Development/test override, such as `CPU` |
 
-The container starts as root only long enough to create its workspace subdirectory, then drops to
-UID/GID `10001`. It does not change ownership of `/workspace/blendrender`: a RunPod network volume
-can be shared by peer Pods and populated through the S3-compatible API, and its mounted filesystem
-may reject ownership changes. Preserve `/workspace/blendrender`; container disk is suitable only
-for temporary files and archive responses. A project ZIP is staged and then extracted on the
-network volume, so a worst-case 20 GiB compressed project plus 20 GiB extracted project requires
-at least 41 GiB free before upload headroom. The dashboard resumes interrupted uploads for 24 hours.
+## Health checks
 
-Production and E2E images set `FLIP_FLUIDS_ADDON=flip_fluids_addon`; local Blender development
-leaves it unset unless the same compatible add-on is installed locally.
+| Endpoint | Meaning |
+| --- | --- |
+| `/healthz` | Web process is running |
+| `/readyz` | Blender and a render backend are available; otherwise returns `503` |
+| `/api/system` | Current Pod's hardware, backends, and storage; requires sign-in |
+| `/api/system/telemetry` | Current Pod's recent performance samples; requires sign-in |
 
-## Preload a scene through RunPod's S3 API
+Before release, validate OptiX and CUDA on an NVIDIA host. For shared storage, render the same
+scene and frame from two Pods and confirm both results appear in both dashboards.
 
-Use `scripts/prepare_runpod_scene.py` to make a local `.blend` or project ZIP appear as a completed
-BlendRender scene before starting a Pod. The script validates input using the same project ZIP rules
-as normal uploads, writes all source files under the configured workspace, and uploads the scene
-manifest only after every source file is present. A Pod therefore sees either no scene or a
-render-ready one.
+## Automated publishing
 
-Run it while no BlendRender Pod is writing to the network volume. This direct S3 workflow bypasses
-the application's shared-volume locks and must use the same `WORKSPACE_ROOT` as the future Pod. The
-default maps `/workspace/blendrender` on the Pod to the `blendrender/` S3 prefix.
+The [GitHub Actions workflow](../.github/workflows/ci.yml) runs tests, static checks, and the frontend
+build. Pull requests only verify changes. After successful checks, pushes publish to
+`ghcr.io/owner/repository`:
 
-Run `uv sync` to install the script's Boto3 dependency, then create a separate RunPod **S3 API key**
-and export its credentials along with the network-volume ID and datacenter.
-`RUNPOD_NETWORK_VOLUME_ID` is the ID used as the S3 bucket, not the storage display name.
-`RUNPOD_S3_REGION` builds the endpoint automatically; set `RUNPOD_S3_ENDPOINT` only to override it.
+- `main` publishes `:main`, `:latest`, and `:sha-COMMIT`.
+- Tags beginning with `v` publish `:TAG` and `:sha-COMMIT`.
 
-```bash
-export AWS_ACCESS_KEY_ID='user_...'
-export AWS_SECRET_ACCESS_KEY='rps_...'
-export RUNPOD_NETWORK_VOLUME_ID='NETWORK_VOLUME_ID'
-export RUNPOD_S3_REGION='EUR-IS-1'
-
-uv run python scripts/prepare_runpod_scene.py /path/to/project.zip \
-  --name 'Final exterior' \
-  --upload-workers 8
-```
-
-The script logs the generated scene ID before transferring files and prints it again when complete.
-If a run is interrupted, rerun the same input with that ID via `--scene-id`; the script inventories
-the unfinished scene and skips source files whose paths and byte sizes already match. It refuses to
-resume when an existing file differs, an unexpected object is present, or the final scene manifest
-has already been published. By default, it never overwrites a completed scene.
-
-To replace only supplied source files in a completed scene, add `--overwrite` with its existing
-`--scene-id`. No source files omitted from the command are deleted, and the scene manifest, jobs,
-and existing render results are also left intact. Passing a standalone `.blend` replaces the
-existing scene's recorded blend entrypoint, even when the original scene was uploaded as a project
-ZIP; this is the usual way to update a blend while retaining its textures, caches, and other assets.
-For a ZIP update, its `.blend` must remain at the same relative path as the original entrypoint.
-
-```bash
-uv run python scripts/prepare_runpod_scene.py /path/to/updated.blend \
-  --scene-id 'EXISTING_SCENE_UUID' \
-  --overwrite
-```
-
-`--overwrite` is deliberately an operator-only exception to scene-source immutability. Run it only
-while no BlendRender Pod is writing to or rendering from that scene. Existing render results are not
-deleted, so download or otherwise distinguish older results before rendering the updated source.
-
-Source files upload concurrently, largest first, through a bounded pool of eight S3 requests by
-default. Set `--upload-workers` from 1 through 16 to tune the pool for the local connection and
-RunPod datacenter; all direct uploads, multipart parts, completion calls, and verification requests
-share that limit. Files of at least 50 MiB use 50 MiB multipart parts with up to four part workers
-per file. Transfers retain explicitly logged retries for server errors and connection/read timeouts,
-completion verification after a timeout, and a final size check.
-
-A ZIP is extracted in a local temporary directory before transfer, so leave enough local temporary
-disk space for its unpacked project files. `MAX_UPLOAD_GB` has the same 20 GiB default limit as the
-dashboard upload. The Boto3 transfer behavior follows RunPod's
-[large-file upload helper](https://github.com/runpod/runpod-s3-examples/blob/main/upload_large_file.py).
-
-## Manage S3 scenes, jobs, and results
-
-Use `scripts/manage_runpod_scenes.py` with the same RunPod S3 environment variables to inventory
-completed scene data on the network volume. Its `list` subcommand prints every scene together with
-its jobs, current job statuses, and published result variants. `--json` emits the same inventory in
-machine-readable form.
-
-```bash
-uv run python scripts/manage_runpod_scenes.py list
-uv run python scripts/manage_runpod_scenes.py list --scene-id 'SCENE_UUID' --json
-```
-
-Use `download` to retrieve the complete result packages (`frame.png`, `preview.webp`, and
-`metadata.json`). Without `--scene-id`, it downloads results for all completed scenes; with it, only
-that scene's results are downloaded. The destination must be new or empty, and the script refuses to
-overwrite any local file. Downloads retain the volume's `scenes/{scene-id}/results/...` hierarchy.
-
-```bash
-uv run python scripts/manage_runpod_scenes.py download \
-  --scene-id 'SCENE_UUID' \
-  --download-dir ./blendrender-results
-```
-
-The three deletion subcommands require either a specific UUID or `--all`, plus the configured
-network-volume ID as an explicit confirmation. `delete-jobs` preserves published results and refuses
-queued or running jobs. `delete-results` preserves scenes and jobs. `delete-scenes` deletes the
-scene's source and results as well as its terminal jobs, and similarly refuses any queued or running
-job. These are direct S3 deletions and cannot be recovered from BlendRender's workspace trash.
-Run them only while no Pod or preparation script is writing to the selected data.
-
-```bash
-uv run --env-file .env -- python scripts/manage_runpod_scenes.py delete-results \
-  --result-id 'RESULT_UUID' \
-  --confirm "$RUNPOD_NETWORK_VOLUME_ID"
-
-uv run --env-file .env -- python scripts/manage_runpod_scenes.py delete-jobs \
-  --all \
-  --confirm "$RUNPOD_NETWORK_VOLUME_ID"
-
-uv run --env-file .env -- python scripts/manage_runpod_scenes.py delete-scenes \
-  --scene-id 'SCENE_UUID' \
-  --confirm "$RUNPOD_NETWORK_VOLUME_ID"
-```
-
-## Clear a RunPod network volume
-
-`scripts/clear_runpod_volume.py` removes **every object** in `RUNPOD_NETWORK_VOLUME_ID`, including
-BlendRender scenes, jobs, results, and workspace metadata. It also aborts incomplete multipart
-uploads left by interrupted transfers. Run it only when no Pod or preparation script is writing to
-the volume.
-
-First inspect the scope without making changes:
-
-```bash
-uv run --env-file .env -- python scripts/clear_runpod_volume.py --dry-run
-```
-
-To delete the volume contents, repeat the configured volume ID as an explicit confirmation:
-
-```bash
-uv run --env-file .env -- python scripts/clear_runpod_volume.py \
-  --confirm "$RUNPOD_NETWORK_VOLUME_ID"
-```
-
-This operation is irreversible. The network volume itself remains; only its stored objects and
-incomplete multipart uploads are removed. RunPod currently supports only individual object deletes,
-so clearing a volume with many files can take time.
-
-## Health and verification
-
-`/healthz` checks the web process. `/readyz` requires Blender and at least one usable backend.
-`/api/system` and `/api/system/telemetry` describe the Pod serving that URL, not a fleet aggregate.
-
-Build with `just docker-build`. Before release, attach one network volume to two real Pods, upload a
-scene once, create same-frame jobs through both dashboards, and confirm both distinct result
-variants appear from each Pod URL.
+Publishing uses the repository's scoped `GITHUB_TOKEN`; no separate publishing secret is required.

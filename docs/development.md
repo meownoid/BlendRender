@@ -2,14 +2,12 @@
 
 ## Prerequisites
 
-- Python 3.12 or newer
-- `uv`
-- Node.js 24 or newer and npm
-- `just`
-- Blender 5.2.1 only when running a real Blender smoke test
-- Docker/Colima only for container tests
+- Python 3.12+, `uv`, and `just`.
+- Node.js 24+ and npm.
+- Blender 5.2.1 for real renders and smoke tests.
+- Docker and Colima for the container E2E workflow.
 
-## First setup
+## Local setup
 
 ```bash
 git submodule update --init --recursive
@@ -17,93 +15,66 @@ cp .env.example .env
 just install
 ```
 
-`git submodule update --init --recursive` obtains the public, tag-pinned FLIP Fluids source that
-the Dockerfiles compile. `just install` runs `uv sync` and `npm ci`. Keep `uv.lock` and
-`frontend/package-lock.json` in sync with intentional dependency changes.
+Edit `.env`: set `APP_PASSWORD` and change `WORKSPACE_ROOT` to `./workspace` for local development.
+Set `BLENDER_BIN` if Blender is not available as `blender` on your `PATH`.
 
-Start the two development servers in separate terminals:
+Start the servers in separate terminals:
 
 ```bash
 just dev-backend
+```
+
+```bash
 just dev-frontend
 ```
 
-The backend listens on `http://localhost:8000`; Vite listens on
-`http://localhost:5173` and proxies API requests according to `frontend/vite.config.ts`. The Just
-recipe supplies a development password of `blendrender-dev`, disables secure cookies for local
-HTTP, uses `./workspace`, invokes `blender` from your `PATH`, and exposes CPU availability. Set
-`BLENDER_BIN` when Blender is installed somewhere else.
+Open `http://localhost:5173` and sign in with the password from `.env`. The frontend proxies API
+requests to `http://localhost:8000`. The backend recipe uses Pod ID `local`, enables CPU rendering,
+and disables secure cookies for local HTTP. It advertises CPU availability even if Blender is not
+installed; actual renders still require Blender.
 
-## Project map
+The FLIP Fluids submodule is compiled by the Dockerfiles. Local Blender needs a compatible add-on
+installed separately to render FLIP caches; see [Rendering](rendering.md#flip-fluids).
 
-```text
-backend/blendrender/       FastAPI service, queue, worker, auth, and system probing
-frontend/src/              React application and CSS
-renderer/                  Python executed inside Blender
-tests/                     Python unit, API, workspace-store, and Blender smoke tests
-scripts/                   Container E2E driver and Colima orchestration
-docs/                      Topic documentation
-Dockerfile                 Production multi-stage image
-Dockerfile.e2e             macOS/Colima test-only image variant
-compose.yaml               Local NVIDIA Docker launch
-Justfile                   Supported development commands
-```
-
-See [Architecture](architecture.md) before changing the queue, process lifecycle, or on-disk data
-layout.
-
-## Verification commands
+## Checks
 
 | Command | Coverage |
 | --- | --- |
-| `just test` | Python pytest suite, then frontend Vitest suite |
-| `just check` | Ruff, strict mypy, ESLint, TypeScript, and production Vite build |
-| `just docker-build` | Production `linux/amd64` image build loaded as `blendrender:local` |
-| `just e2e-backend` | Real Blender CPU render through the public API in a Colima container |
+| `just test` | Python pytest and frontend Vitest suites |
+| `just check` | Ruff, strict mypy, ESLint, TypeScript, and production frontend build |
+| `just docker-build` | Production `linux/amd64` image, loaded as `blendrender:local` |
+| `just e2e-backend` | Real Blender CPU render through the API in a Colima container |
 
-GitHub Actions runs the equivalent test and check commands for pull requests and trusted pushes.
-Pushes to `main` and `v*` tags then build and publish to the repository's GHCR package after
-verification succeeds.
-
-During iteration, narrower commands are useful:
+For targeted checks, run from the repository root:
 
 ```bash
 uv run pytest tests/test_api.py
-uv run pytest tests/test_progress.py
-cd frontend && npm test -- Dashboard.test.tsx
-cd frontend && npm run lint
+npm test --prefix frontend -- NewJobPanel.test.tsx
 ```
 
-Run the smallest relevant check while editing, then run both `just test` and `just check` before
-handing off a behavioral change. A docs-only change does not require application tests, but local
-Markdown links should still be checked.
+API and workspace tests use temporary directories and do not need Blender. Blender smoke tests
+skip when no binary is configured or found on `PATH`. The container E2E test checks a CPU render and PNG,
+WebP, and ZIP downloads. OptiX and CUDA need verification on an NVIDIA host or RTX RunPod Pod.
 
-## Test layers and limits
+Run the smallest relevant checks while editing, then `just test` and `just check` for behavioral
+changes. For documentation-only edits, check local links and accuracy against the code.
 
-- API and workspace-store tests use temporary directories and do not require Blender.
-- Progress and workspace-store tests exercise event parsing, pod ownership, restart recovery, and
-  atomic result publication.
-- Frontend tests use Vitest, Testing Library, and jsdom.
-- `tests/test_blender_smoke.py` requires a compatible Blender binary and verifies scene settings
-  and rendered output. It skips when Blender is unavailable.
-- `just e2e-backend` builds a production-shaped container, packages
-  `tests/fixtures/test.blend` as a project ZIP, renders one CPU sample at a reduced resolution,
-  validates PNG, WebP, and ZIP downloads, then deletes the job.
+## Project layout
 
-Apple Silicon cannot validate NVIDIA passthrough. Run final OptiX and CUDA smoke tests on an RTX
-RunPod Pod.
+| Path | Contents |
+| --- | --- |
+| `backend/blendrender/` | API, authentication, workspace, and render worker |
+| `frontend/src/` | React dashboard and API client |
+| `renderer/` | Scripts executed in Blender's bundled Python |
+| `scripts/` | S3 utilities, container entrypoint, and E2E tools |
+| `tests/` | Backend and Blender tests; frontend tests live beside components |
+| `docs/` | User guides and technical reference |
+| `Justfile` | Development and verification commands |
 
-## Code conventions
+Keep dependency lockfiles synchronized. Use typed boundary models, strict mypy, and Ruff's
+100-character line length for Python; keep shared frontend API types in `frontend/src/types.ts`.
+Do not import application-only dependencies into Blender scripts.
 
-- Backend code targets Python 3.12, uses strict mypy, and is formatted to a 100-character Ruff
-  line length.
-- Parse request and process output at their boundaries into the models in `models.py` or small
-  typed values. Keep worker internals dependent on those validated invariants.
-- The frontend uses React 19 and TypeScript. Shared API shapes belong in `frontend/src/types.ts`;
-  network behavior belongs in `frontend/src/lib/api.ts`.
-- Keep the Blender-side script dependency-light: it executes in Blender's bundled Python, not the
-  application's virtual environment.
-- Preserve the one-process, one-render-worker architecture unless the storage and cancellation
-  model are deliberately redesigned.
-
-Additional agent-oriented instructions are in [AGENTS.md](../AGENTS.md).
+See [Architecture](architecture.md) before changing storage or process control, and
+[AGENTS.md](../AGENTS.md) for contribution guidance. CI and image publishing are described in
+[Deployment](deployment.md#automated-publishing).

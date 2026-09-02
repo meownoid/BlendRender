@@ -1,61 +1,50 @@
 # Rendering
 
-## Scene input requirements
+## Prepare a scene
 
-- Supply a `.blend` file, or a `.zip` that contains exactly one `.blend` plus external resources.
-- A ZIP preserves its directory tree. Unpacked images and sounds must use Blender-relative paths
-  that resolve within the archive; BlendRender does not rewrite paths or search for missing files.
-- FLIP Fluids cache directories must be included in a project ZIP beside their `.blend` file so the
-  add-on can resolve the same relative cache path used during baking.
-- Pack external images and sounds when uploading a standalone `.blend`.
-- Make linked library data local. Project ZIPs intentionally allow only one `.blend`, so separate
-  library files are rejected.
-- Configure an active camera in the active scene.
-- Completing a resumable dashboard upload creates an immutable scene; choose a frame or range only
-  when creating a later job. The offline RunPod S3 preparation tool has a documented `--overwrite`
-  exception for replacing supplied source files in an existing scene.
+- Upload a `.blend` with images and sounds packed, or a ZIP containing exactly one `.blend` and its
+  external resources.
+- Use Blender-relative paths for unpacked resources. ZIPs preserve folders; BlendRender does not
+  rewrite paths or locate missing files.
+- Make linked library data local: separate `.blend` libraries are not allowed in project ZIPs.
+- Set an active camera in the scene you want to render.
+- Bake simulations and include their caches and other dependencies where supported.
 
-The renderer explicitly detects missing, absolute, and out-of-project unpacked file-backed images,
-libraries, and sounds. Production images bundle the public FLIP Fluids Demo v1.8.8 add-on and load
-it before the scene opens, so compatible baked FLIP caches can render. Caches baked with the demo
-retain its baked watermark; the demo does not include Mixbox color blending. Other external
-dependencies, add-ons, fonts, caches, simulations, or system resources may still fail at render
-time and should be baked or included where Blender supports it.
+Uploads create reusable scenes without starting a render. Select the scene and choose **New render**
+to create a job. Upload a new scene when the source changes; see the
+[S3 guide](s3-guide.md#replace-scene-source-files) for offline source replacement.
 
-## Settings preserved and overridden
+The renderer checks unpacked images, libraries, and sounds for missing or out-of-project paths.
+Other dependencies, including fonts, add-ons, and simulation caches, may still fail at render time.
 
-The uploaded active scene supplies camera choice and, unless optional request overrides are used,
-resolution, resolution percentage, and Cycles sample count. Denoising, compositor setup, and color
-management remain scene-controlled.
+## FLIP Fluids
 
-For every job, BlendRender overrides:
+The production image bundles FLIP Fluids Demo v1.8.8. Include baked caches in a project ZIP alongside
+the `.blend`, preserving the relative cache path used during baking. The add-on loads before the
+scene opens. Demo-baked caches retain their watermark; Mixbox color blending is not included.
 
-- render engine to Cycles;
-- compute device to the requested CPU, CUDA, or OptiX backend;
-- requested frame sequence;
-- render output path;
-- image format to PNG; and
-- file-extension output behavior.
+## Render settings
 
-The optional API overrides are `samples`, Cycles `tile_size` (8–8192), `resolution_x` plus
-`resolution_y`, and `resolution_percentage`. The dashboard exposes OptiX, CUDA, and CPU when each
-backend is available.
+The active scene supplies the camera, denoising, compositor, and color management. Samples,
+resolution, resolution percentage, and Cycles tile size use scene settings unless overridden.
 
-Blender starts with `--background`, `--disable-autoexec`, and `--python-exit-code 1`. When the
-bundled FLIP add-on is configured, a fixed trusted bootstrap enables it before the uploaded scene
-opens. The application then explicitly runs its own fixed `renderer/blendrender_render.py` script.
-User-provided embedded Python is not auto-executed.
+Every job uses Cycles, the selected backend and frame sequence, and PNG output. The dashboard
+supports OptiX, CUDA, and CPU when available on the Pod. Samples, tile size, and resolution can be
+adjusted per job; see [API limits](api.md#jobs).
 
-## Cancellation, retries, and outputs
+Blender runs in background mode with `--disable-autoexec` and `--python-exit-code 1`. Only the
+configured trusted bootstrap and render scripts are explicitly launched; uploaded embedded Python
+does not auto-execute.
 
-Canceling a running job terminates the complete Blender process group. A verified result is published
-under its scene with a unique result ID, its producing job and Pod, selected backend/device names,
-effective samples, and render duration. Retry reuses published results belonging to that same job
-and renders only missing frames. Different jobs may publish separate variants for the same frame.
+## Results and retries
 
-Each result package contains `frame.png`, `preview.webp`, and `metadata.json`. Preview images are
-WebP thumbnails no larger than 720×480. ZIP downloads include PNGs and metadata without PNG
-recompression.
+Results appear under their scene with the frame, job, Pod, backend, hardware, samples, and render
+time. Multiple jobs can render the same frame without overwriting previous results.
 
-For exact request limits and lifecycle operations, see the [API reference](api.md). For the trusted
-operator model and web controls, see [Security](security.md).
+- Download individual PNGs or ZIPs containing PNGs and JSON metadata.
+- Preview frames as WebP thumbnails up to 720×480.
+- Cancel a render to stop Blender and its child processes; completed results remain available.
+- Retry failed, canceled, or interrupted jobs to render only their missing frames.
+
+Each stored result contains `frame.png`, `preview.webp`, and `metadata.json`. Retrying reuses only
+that job's verified results. Jobs remain owned by the Pod that created them.
