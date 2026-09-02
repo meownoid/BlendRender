@@ -44,3 +44,44 @@ test('submits an optional tile size override', async () => {
     tile_size: 256,
   })))
 })
+
+test('keeps an empty frame field blank until it loses focus', () => {
+  render(
+    <NewJobPanel
+      open
+      scene={null}
+      system={null}
+      busy={false}
+      onClose={vi.fn()}
+      onSubmit={vi.fn()}
+    />,
+  )
+
+  const start = screen.getByLabelText('Start')
+  fireEvent.change(start, { target: { value: '' } })
+  expect(start).toHaveValue(null)
+
+  fireEvent.change(start, { target: { value: '14' } })
+  expect(start).toHaveValue(14)
+
+  fireEvent.blur(start)
+  expect(screen.queryByText('Start frame must be an integer.')).not.toBeInTheDocument()
+})
+
+test('validates an empty frame field after it loses focus', () => {
+  render(
+    <NewJobPanel
+      open
+      scene={null}
+      system={null}
+      busy={false}
+      onClose={vi.fn()}
+      onSubmit={vi.fn()}
+    />,
+  )
+
+  const start = screen.getByLabelText('Start')
+  fireEvent.change(start, { target: { value: '' } })
+  fireEvent.blur(start)
+  expect(screen.getByText('Start frame must be an integer.')).toBeVisible()
+})
