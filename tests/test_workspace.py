@@ -242,3 +242,63 @@ def test_results_are_invisible_until_complete_packages_are_published(settings) -
             pending,
         )
     assert len(store.list_results(scene_id, frame=1)) == 2
+
+
+def test_frame_pages_only_read_metadata_for_the_requested_frames(settings, monkeypatch) -> None:
+    store = WorkspaceStore(settings)
+    store.initialize()
+    scene_id = "00000000-0000-4000-8000-000000000241"
+    job_id = "00000000-0000-4000-8000-000000000242"
+    create_scene(store, scene_id)
+    store.create_job(
+        JobManifest(
+            id=job_id,
+            scene_id=scene_id,
+            filename="input.blend",
+            owner_pod_id="pod-a",
+            mode="range",
+            frame_start=1,
+            frame_end=3,
+            backend=Backend.CPU,
+            created_at=utc_now(),
+        )
+    )
+    for frame in range(1, 4):
+        result_id = f"00000000-0000-4000-8000-{frame:012d}"
+        pending = store.job_paths(job_id)["pending"] / result_id
+        pending.mkdir()
+        Image.new("RGB", (8, 8), (0, 0, 0)).save(pending / "frame.png", "PNG")
+        Image.new("RGB", (8, 8), (0, 0, 0)).save(pending / "preview.webp", "WEBP")
+        store.publish_result(
+            FrameResult(
+                id=result_id,
+                scene_id=scene_id,
+                job_id=job_id,
+                frame=frame,
+                pod_id="pod-a",
+                backend=Backend.CPU,
+                hardware=["CPU"],
+                samples=1,
+                render_seconds=0.1,
+                completed_at=utc_now(),
+            ),
+            pending,
+        )
+
+    calls: list[int | None] = []
+    list_results = store.list_results
+
+    def record_list_results(scene_id: str, *, frame: int | None = None) -> list[FrameResult]:
+        calls.append(frame)
+        return list_results(scene_id, frame=frame)
+
+    monkeypatch.setattr(store, "list_results", record_list_results)
+
+    first_page = store.list_frame_groups(scene_id, cursor=None, limit=1)
+    second_page = store.list_frame_groups(scene_id, cursor=first_page.next_cursor, limit=1)
+
+    assert [group.frame for group in first_page.items] == [3]
+    assert first_page.next_cursor == 3
+    assert [group.frame for group in second_page.items] == [2]
+    assert second_page.next_cursor == 2
+    assert calls == [3, 2]

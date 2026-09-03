@@ -578,17 +578,25 @@ class WorkspaceStore:
         return sorted(results, key=lambda result: (result.frame, result.completed_at), reverse=True)
 
     def list_frame_groups(self, scene_id: str, cursor: int | None, limit: int) -> FramesPage:
-        results = self.list_results(scene_id)
-        grouped: dict[int, list[FrameResult]] = {}
-        for result in results:
-            grouped.setdefault(result.frame, []).append(result)
-        frames = sorted(grouped, reverse=True)
+        base = self.scene_paths(scene_id)["results"]
+        frame_roots = sorted(
+            (
+                (int(root.name), root)
+                for root in _directory_children(base)
+                if root.name.isdecimal() and _directory_children(root)
+            ),
+            key=lambda item: item[0],
+            reverse=True,
+        )
         if cursor is not None:
-            frames = [frame for frame in frames if frame < cursor]
-        page_frames = frames[:limit]
-        next_cursor = frames[limit] if len(frames) > limit else None
+            frame_roots = [item for item in frame_roots if item[0] < cursor]
+        page_roots = frame_roots[:limit]
+        next_cursor = page_roots[-1][0] if len(frame_roots) > limit else None
         return FramesPage(
-            items=[FrameGroup(frame=frame, results=grouped[frame]) for frame in page_frames],
+            items=[
+                FrameGroup(frame=frame, results=self.list_results(scene_id, frame=frame))
+                for frame, _ in page_roots
+            ],
             next_cursor=next_cursor,
         )
 

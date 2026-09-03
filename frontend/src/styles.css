@@ -289,7 +289,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .is-spinning { animation: results-download-spin .9s linear infinite; }
 @keyframes results-download-indeterminate { from { transform: translateX(-100%); } to { transform: translateX(295%); } }
 @keyframes results-download-spin { to { transform: rotate(360deg); } }
-.frame-group { margin-top: 26px; }
+.frame-group { margin-top: 26px; content-visibility: auto; contain-intrinsic-size: auto 260px; }
 .frame-group h3 { margin: 0 0 10px; color: #cdd4da; font-family: 'JetBrains Mono Variable', monospace; font-size: 12px; font-weight: 600; letter-spacing: .04em; }
 .variant-grid { display: flex; flex-wrap: wrap; gap: 12px; }
 .variant-grid > * { flex: 0 0 auto; }
@@ -308,6 +308,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .results-empty { min-height: 260px; margin-top: 18px; display: grid; place-items: center; border: 1px dashed var(--line); color: var(--muted); font-size: 13px; }
 .results-empty--loading { align-content: center; gap: 10px; }
 .results-empty--loading svg { color: var(--accent); }
+.results-load-more { display: flex; margin: 26px auto 0; }
 .side-panel { position: fixed; z-index: 30; top: 58px; right: 0; bottom: 0; width: min(370px, 100vw); padding: 22px; overflow-y: auto; border-left: 1px solid var(--line); background: #11171c; box-shadow: -18px 0 48px rgba(0,0,0,.35); }
 .side-panel.system-panel { background: linear-gradient(135deg, #151a1f, #11151a); }
 .side-panel header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
@@ -359,6 +360,8 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .table-progress { display: inline-block; width: 54px; height: 4px; margin-right: 6px; overflow: hidden; border-radius: 99px; vertical-align: middle; background: #2b343d; }
 .table-progress span { display: block; height: 100%; background: var(--accent); }
 .job-actions { display: flex; justify-content: flex-end; gap: 2px; }
+.job-actions--readonly { display: grid; grid-template-columns: 39px max-content; align-items: center; gap: 2px; min-height: 39px; }
+.job-actions__download { width: 39px; height: 39px; display: grid; place-items: center; }
 
 @media (max-width: 900px) {
   body { overflow: auto; }

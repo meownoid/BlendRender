@@ -89,3 +89,29 @@ test('opens and closes job details with the keyboard', () => {
   fireEvent.keyDown(row, { key: ' ' })
   expect(screen.queryByText('Failure details')).not.toBeInTheDocument()
 })
+
+test('reserves the download control slot for remote jobs', () => {
+  const completedRemoteJob: Job = {
+    ...failedJob,
+    id: 'job-remote',
+    owner_pod_id: 'remote',
+    status: 'completed',
+  }
+
+  render(
+    <JobsView
+      jobs={[failedJob, completedRemoteJob]}
+      scenes={[scene]}
+      podId="local"
+      onCancel={vi.fn().mockResolvedValue(undefined)}
+      onRetry={vi.fn().mockResolvedValue(undefined)}
+      onDelete={vi.fn().mockResolvedValue(undefined)}
+    />,
+  )
+
+  const readOnlyLabels = screen.getAllByText('Read-only')
+  expect(readOnlyLabels).toHaveLength(1)
+  expect(readOnlyLabels[0].parentElement).toHaveClass('job-actions--readonly')
+  expect(readOnlyLabels[0].previousElementSibling).toHaveClass('job-actions__download')
+  expect(screen.getByTitle('Download job results')).toBeVisible()
+})

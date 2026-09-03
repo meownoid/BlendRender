@@ -27,24 +27,18 @@ test('formats FastAPI validation errors for render settings', async () => {
   })
 })
 
-test('loads every frame page for a scene', async () => {
-  const fetchMock = vi.spyOn(globalThis, 'fetch')
-    .mockResolvedValueOnce(new Response(JSON.stringify({
-      items: [{ frame: 200, results: [] }],
-      next_cursor: 199,
-    })))
-    .mockResolvedValueOnce(new Response(JSON.stringify({
-      items: [{ frame: 198, results: [] }],
-      next_cursor: null,
-    })))
+test('loads one result page at a time for a scene', async () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+    items: [{ frame: 200, results: [] }],
+    next_cursor: 199,
+  })))
 
-  await expect(api.allFrames('scene-1')).resolves.toEqual([
-    { frame: 200, results: [] },
-    { frame: 198, results: [] },
-  ])
+  await expect(api.frames('scene-1', 199)).resolves.toEqual({
+    items: [{ frame: 200, results: [] }],
+    next_cursor: 199,
+  })
   expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
-    '/api/scenes/scene-1/frames?limit=200',
-    '/api/scenes/scene-1/frames?limit=200&cursor=199',
+    '/api/scenes/scene-1/frames?limit=50&cursor=199',
   ])
 })
 

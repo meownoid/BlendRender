@@ -114,3 +114,23 @@ test('shows a loading state instead of stale or empty results', () => {
   expect(screen.getByRole('status')).toHaveTextContent('Loading scene results…')
   expect(screen.queryByText('Rendered frames from every pod will appear here.')).not.toBeInTheDocument()
 })
+
+test('loads the next result page without replacing rendered frames', () => {
+  const onLoadMore = vi.fn()
+  render(
+    <SceneWorkspace
+      scene={scene}
+      jobs={[]}
+      loading={false}
+      hasMore
+      onLoadMore={onLoadMore}
+      onDelete={vi.fn().mockResolvedValue(undefined)}
+      frames={[{ frame: 12, results: [{ id: 'result-cpu', scene_id: scene.id, job_id: 'job-1', frame: 12, pod_id: 'pod-cpu', backend: 'CPU', hardware: ['AMD EPYC'], samples: 32, render_seconds: 8.4, completed_at: '2026-01-01T00:01:00Z' }] }]}
+    />,
+  )
+
+  fireEvent.click(screen.getByRole('button', { name: 'Load more frames' }))
+
+  expect(onLoadMore).toHaveBeenCalledOnce()
+  expect(screen.getByText('Frame 0012')).toBeVisible()
+})

@@ -60,13 +60,17 @@ export function JobsView({ jobs, scenes, podId, onCancel, onRetry, onDelete }: J
                   <td>{job.owner_pod_id}</td>
                   <td>{formatDuration(job.elapsed_seconds)}</td>
                   <td>
-                    <div className="job-actions" onClick={(event) => event.stopPropagation()}>
+                    {local ? <div className="job-actions" onClick={(event) => event.stopPropagation()}>
                       {job.status === 'completed' ? <button className="icon-button" title="Download job results" onClick={() => void api.downloadJobArchive(job)}><Download size={17} /></button> : null}
-                      {local && (job.status === 'queued' || job.status === 'running') ? <button className="icon-button" title="Cancel" onClick={() => void onCancel(job)}><XCircle size={17} /></button> : null}
-                      {local && recoverable ? <button className="icon-button" title="Retry" onClick={() => void onRetry(job)}><RefreshCw size={17} /></button> : null}
-                      {local && ['completed', 'failed', 'canceled', 'interrupted'].includes(job.status) ? <button className="icon-button" title="Delete" onClick={() => void onDelete(job)}><Trash2 size={17} /></button> : null}
-                      {!local ? <small>Read-only</small> : null}
-                    </div>
+                      {(job.status === 'queued' || job.status === 'running') ? <button className="icon-button" title="Cancel" onClick={() => void onCancel(job)}><XCircle size={17} /></button> : null}
+                      {recoverable ? <button className="icon-button" title="Retry" onClick={() => void onRetry(job)}><RefreshCw size={17} /></button> : null}
+                      {['completed', 'failed', 'canceled', 'interrupted'].includes(job.status) ? <button className="icon-button" title="Delete" onClick={() => void onDelete(job)}><Trash2 size={17} /></button> : null}
+                    </div> : <div className="job-actions job-actions--readonly" onClick={(event) => event.stopPropagation()}>
+                      <span className="job-actions__download">
+                        {job.status === 'completed' ? <button className="icon-button" title="Download job results" onClick={() => void api.downloadJobArchive(job)}><Download size={17} /></button> : null}
+                      </span>
+                      <small>Read-only</small>
+                    </div>}
                   </td>
                 </tr>
                 {selected ? <tr className="job-details-row"><td colSpan={8}>
