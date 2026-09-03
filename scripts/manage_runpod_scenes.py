@@ -82,7 +82,7 @@ def _create_parser() -> argparse.ArgumentParser:
         type=Path,
         required=True,
         metavar="DIRECTORY",
-        help="Download result packages into a new or empty directory",
+        help="Download result packages into a directory, skipping existing files",
     )
     download_command.add_argument(
         "--transfer-workers",

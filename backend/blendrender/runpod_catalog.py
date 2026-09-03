@@ -105,21 +105,14 @@ def download_results(
     scenes: tuple[CatalogScene, ...],
     destination: Path,
 ) -> DownloadSummary:
-    """Download complete published result packages without overwriting local files."""
+    """Download complete published result packages, skipping existing local files."""
 
-    if destination.exists():
-        if not destination.is_dir():
-            raise RunpodScenePreparationError(
-                f"Download destination {destination} is not a directory"
-            )
-        if any(destination.iterdir()):
-            raise RunpodScenePreparationError(
-                f"Refusing to write downloads into non-empty directory {destination}"
-            )
+    if destination.exists() and not destination.is_dir():
+        raise RunpodScenePreparationError(f"Download destination {destination} is not a directory")
     destination.mkdir(parents=True, exist_ok=True)
 
     source_root = settings.workspace_prefix / "scenes"
-    downloads = tuple(
+    targets = tuple(
         (
             result_file,
             _download_destination(destination, source_root, scene.manifest.id, result_file.key),
@@ -128,6 +121,7 @@ def download_results(
         for result in scene.results
         for result_file in result.files
     )
+    downloads = tuple((result_file, path) for result_file, path in targets if not path.exists())
     if not downloads:
         return DownloadSummary(file_count=0, size_bytes=0)
 

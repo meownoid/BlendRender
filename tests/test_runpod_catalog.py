@@ -206,16 +206,36 @@ def test_download_results_writes_only_selected_scene_result_packages(
     assert all(scene_id in key.as_posix() for key in catalog_uploader.downloaded_keys)
 
 
-def test_download_results_refuses_a_non_empty_destination(
+def test_download_results_skips_existing_destination_files(
     tmp_path: Path, catalog_uploader: CatalogUploader, runpod_settings: RunpodS3Settings
 ) -> None:
-    destination = tmp_path / "results"
-    destination.mkdir()
-    (destination / "existing.txt").write_text("keep", encoding="utf-8")
-    scenes = list_scenes(catalog_uploader, runpod_settings)
+    scene_id = "00000000-0000-4000-8000-000000000501"
+    destination = (
+        tmp_path
+        / "results"
+        / "scenes"
+        / scene_id
+        / "results"
+        / "000001"
+        / "00000000-0000-4000-8000-000000000504"
+    )
+    destination.mkdir(parents=True)
+    existing_frame = destination / "frame.png"
+    existing_frame.write_bytes(b"existing")
+    scenes = list_scenes(catalog_uploader, runpod_settings, scene_id=scene_id)
 
-    with pytest.raises(RunpodScenePreparationError, match="non-empty directory"):
-        download_results(catalog_uploader, runpod_settings, scenes, destination)
+    summary = download_results(catalog_uploader, runpod_settings, scenes, tmp_path / "results")
+
+    metadata_content = next(
+        content for key, content in catalog_uploader.objects.items() if key.name == "metadata.json"
+    )
+    assert summary.file_count == 2
+    assert summary.size_bytes == len(b"preview") + len(metadata_content)
+    assert existing_frame.read_bytes() == b"existing"
+    assert {key.name for key in catalog_uploader.downloaded_keys} == {
+        "preview.webp",
+        "metadata.json",
+    }
 
 
 def test_download_results_refuses_a_file_destination(

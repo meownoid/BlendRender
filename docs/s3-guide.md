@@ -80,8 +80,8 @@ uv run python scripts/manage_runpod_scenes.py download \
 `--scene-id` from `download` to download results for all scenes.
 
 Downloads include `frame.png`, `preview.webp`, and `metadata.json`, preserving the
-`scenes/{scene-id}/results/...` layout. The destination must be new or empty; existing files are
-never overwritten. `--transfer-workers` accepts 1–16, with a default of eight.
+`scenes/{scene-id}/results/...` layout. The destination may already contain files; matching local
+paths are skipped and never overwritten. `--transfer-workers` accepts 1–16, with a default of eight.
 
 ## Delete selected data
 
