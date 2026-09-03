@@ -26,8 +26,10 @@ share scenes and render in parallel.
    docker buildx build --platform linux/amd64 -t YOUR_REGISTRY/blendrender:2.1.0 --push .
    ```
 
-3. Create an RTX RunPod Pod using the image, attach a network volume at `/workspace`, expose HTTP
-   port `8000`, and set a long, random `APP_PASSWORD`. Keep `COOKIE_SECURE=true` for HTTPS.
+3. Before creating the Pod, create a RunPod network volume. Attach it at `/workspace` on every
+   rendering Pod: this preserves scenes and results between runs and is required for multiple Pods
+   to share work. Create an RTX RunPod Pod using the image, expose HTTP port `8000`, and set a
+   long, random `APP_PASSWORD`. Keep `COOKIE_SECURE=true` for HTTPS.
 
 4. Open `https://POD_ID-8000.proxy.runpod.net`, sign in, upload a scene, and select **New render**.
 
